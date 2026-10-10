@@ -1,0 +1,23 @@
+{
+    "name": "Storbild",
+    "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+    "features": {
+        "ghcr.io/shyim/devcontainers-features/bun:0": {},
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {}
+    },
+    "remoteUser": "node",
+    "mounts": [
+        "source=storbild-claude-${devcontainerId},target=/home/node/.claude,type=volume"
+    ],
+    "containerEnv": {
+        "CLAUDE_CONFIG_DIR": "/home/node/.claude"
+    },
+    "postCreateCommand": "sudo chown node:node /home/node/.claude",
+    "runArgs": [
+        "--tmpfs=/tmp:rw,mode=1777"
+    ],
+    "forwardPorts": [
+        3000,
+        3001
+    ]
+}
