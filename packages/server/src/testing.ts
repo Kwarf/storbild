@@ -53,7 +53,7 @@ export const testCatalog: PluginCatalog = {
         kind: "scene",
         label: "Markdown text",
         viewer: "sb-markdown-scene",
-        config: z.object({ title: z.string().optional(), content: z.string() }),
+        config: z.object({ content: z.string() }),
         configVersion: 1,
       },
     },

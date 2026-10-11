@@ -17,7 +17,7 @@ const FIT_STEP = 0.92;
 const sanitize = (markdown: string) =>
   DOMPurify.sanitize(renderMarkdown(markdown), { FORBID_TAGS: ["iframe", "form", "style"] });
 
-/** A title and a markdown body in the theme's typography, shrunk until it fits the screen. */
+/** Markdown in the theme's typography, shrunk until it fits the screen. */
 export class MarkdownScene extends StorbildScene<Config, Settings> {
   static override styles = css`
     :host {
@@ -45,7 +45,6 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
       font-family: var(--sb-font-heading, sans-serif);
       line-height: 1.1;
     }
-    .title,
     h1 {
       font-size: 2em;
     }
@@ -56,11 +55,6 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
     h4 {
       font-size: 1.15em;
     }
-    .title {
-      margin: 0 0 0.5em;
-      font-family: var(--sb-font-heading, sans-serif);
-      line-height: 1.1;
-    }
     p,
     ul,
     ol,
@@ -69,7 +63,7 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
     table {
       margin: 0 0 0.6em;
     }
-    .body > :last-child {
+    .content > :last-child {
       margin-bottom: 0;
     }
     ul,
@@ -166,10 +160,7 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
   }
 
   override render() {
-    return html`<div class="content">
-      ${this.config.title ? html`<h1 class="title">${this.config.title}</h1>` : null}
-      <div class="body">${unsafeHTML(sanitize(this.config.content))}</div>
-    </div>`;
+    return html`<div class="content">${unsafeHTML(sanitize(this.config.content))}</div>`;
   }
 }
 

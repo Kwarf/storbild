@@ -156,8 +156,8 @@ describe("plugin host", () => {
   test("loads built-in and external plugins", () => {
     expect(plugin("markdown")).toMatchObject({
       status: "ok",
-      version: "0.3.0",
-      module: "/plugins/markdown/0.3.0/viewer.js",
+      version: "0.4.0",
+      module: "/plugins/markdown/0.4.0/viewer.js",
       settings: { fontScale: 1 },
       types: { text: { kind: "scene", label: "Markdown text", viewer: "sb-markdown-scene" } },
     });
@@ -531,7 +531,7 @@ describe("schemas", () => {
 describe("modules", () => {
   test("serve each plugin's viewer module with host modules left external", async () => {
     for (const app of [storbild.viewer, storbild.admin]) {
-      const res = await fetch(new URL("/plugins/markdown/0.3.0/viewer.js", app.url));
+      const res = await fetch(new URL("/plugins/markdown/0.4.0/viewer.js", app.url));
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/javascript");
       expect(res.headers.get("Cache-Control")).toContain("immutable");
@@ -542,7 +542,7 @@ describe("modules", () => {
     }
     // Plugins' own dependencies are bundled in; only the host modules stay external.
     const markdown = await (
-      await fetch(new URL("/plugins/markdown/0.3.0/viewer.js", storbild.viewer.url))
+      await fetch(new URL("/plugins/markdown/0.4.0/viewer.js", storbild.viewer.url))
     ).text();
     expect(markdown).not.toMatch(/from\s*"(marked|dompurify)"/);
     const editor = await fetch(new URL("/plugins/info/0.2.0/admin.js", storbild.admin.url));

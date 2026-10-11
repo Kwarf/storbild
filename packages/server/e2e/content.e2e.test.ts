@@ -50,11 +50,10 @@ describe.skipIf(!enabled)("content pages", () => {
       hasText: text,
     });
 
-  async function newMarkdown(name: string, title: string, content: string) {
+  async function newMarkdown(name: string, content: string) {
     await admin.getByRole("button", { name: "New instance" }).click();
     await editor().getByLabel("Instance type").selectOption({ label: "Markdown text" });
     await editor().getByLabel("Name").fill(name);
-    await editor().getByLabel("Title").fill(title);
     await editor().getByLabel("Content").fill(content);
     await editor().getByRole("button", { name: "Create" }).click();
     await until(() => named(name) !== undefined);
@@ -98,19 +97,15 @@ describe.skipIf(!enabled)("content pages", () => {
       await admin.getByRole("button", { name: "New instance" }).click();
       await editor().getByLabel("Instance type").selectOption({ label: "Markdown text" });
       await editor().getByLabel("Name").fill("Welcome");
-      await editor().getByLabel("Title").fill("Welcome to the party");
-      await editor().getByLabel("Content").fill("Have fun");
+      await editor().getByLabel("Content").fill("# Welcome to the party\n\nHave fun");
       await editor().locator("sb-markdown-scene", { hasText: "Welcome to the party" }).waitFor();
       await shot(admin, "library-new");
       await editor().getByRole("button", { name: "Create" }).click();
       await until(() => named("Welcome") !== undefined);
-      expect(named("Welcome")?.config).toEqual({
-        title: "Welcome to the party",
-        content: "Have fun",
-      });
+      expect(named("Welcome")?.config).toEqual({ content: "# Welcome to the party\n\nHave fun" });
 
-      await newMarkdown("Rules", "Rules", "Be nice");
-      await newMarkdown("Bar", "Bar", "Open all night");
+      await newMarkdown("Rules", "# Rules\n\nBe nice");
+      await newMarkdown("Bar", "# Bar\n\nOpen all night");
       await admin.locator('[data-group="markdown/text"] li').nth(2).waitFor();
     },
     TIMEOUT,

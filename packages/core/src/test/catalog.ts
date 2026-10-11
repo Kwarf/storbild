@@ -14,7 +14,7 @@ export const testCatalog: PluginCatalog = {
         kind: "scene",
         label: "Text",
         viewer: "sb-markdown-scene",
-        config: z.object({ title: z.string().optional(), content: z.string() }),
+        config: z.object({ content: z.string() }),
         configVersion: 1,
       },
       // Version 1 stored `{ n: "3" }`; version 2 is `{ count: 3, step: 1 }`.

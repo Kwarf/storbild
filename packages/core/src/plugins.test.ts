@@ -79,7 +79,7 @@ describe("reconcilePlugins", () => {
         instances: {
           ok: { ...instance("ok", "markdown", "text", { content: "x" }), error: "stale" },
           migrated: instance("migrated", "markdown", "counter", { n: "7" }),
-          invalid: instance("invalid", "markdown", "text", { title: 1 }),
+          invalid: instance("invalid", "markdown", "text", { content: 1 }),
           newer: instance("newer", "markdown", "text", { content: "x" }, 5),
           noType: instance("noType", "markdown", "gone", {}),
           missing: instance("missing", "gone", "text", {}),
@@ -96,6 +96,6 @@ describe("reconcilePlugins", () => {
       expect([id, value.error]).toEqual([id, expect.any(String)]);
     }
     // A broken instance keeps its stored config, so fixing the plugin restores it.
-    expect(state.instances.invalid?.config).toEqual({ title: 1 });
+    expect(state.instances.invalid?.config).toEqual({ content: 1 });
   });
 });

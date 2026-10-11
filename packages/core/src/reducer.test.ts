@@ -519,7 +519,7 @@ describe("assets", () => {
     }
     s.run({
       type: "instance.create",
-      payload: { ...markdown, name: "Logo", config: { content: "x", title: inConfig } },
+      payload: { ...markdown, name: "Logo", config: { content: inConfig } },
     });
     s.run({
       type: "instance.create",

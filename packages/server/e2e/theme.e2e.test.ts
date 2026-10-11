@@ -97,7 +97,7 @@ describe.skipIf(!enabled)("theming", () => {
       plugin: "markdown",
       type: "text",
       name: "Welcome",
-      config: { title: "Welcome", content: "Doors open at 18:00." },
+      config: { content: "# Welcome\n\nDoors open at 18:00." },
     })) as string;
     await command("playlist.addItem", { instanceId: welcome });
     const clock = await command("instance.create", {

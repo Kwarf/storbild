@@ -115,7 +115,7 @@ describe.skipIf(!enabled)("viewer", () => {
         plugin: "markdown",
         type: "text",
         name: "Welcome",
-        config: { title: "Welcome", content: "Hello, party" },
+        config: { content: "# Welcome\n\nHello, party" },
       })) as string;
       await setPlaylist(markdown);
       await forAll((page) =>
@@ -140,7 +140,7 @@ describe.skipIf(!enabled)("viewer", () => {
     async () => {
       await command("instance.update", {
         id: markdown,
-        config: { title: "Welcome", content: "Doors open at 18:00" },
+        config: { content: "# Welcome\n\nDoors open at 18:00" },
       });
       await forAll((page) =>
         scene(page, "main").locator("sb-markdown-scene p", { hasText: "Doors open" }).waitFor(),
