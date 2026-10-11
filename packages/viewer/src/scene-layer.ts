@@ -154,10 +154,12 @@ export class SceneLayer {
   /** Crossfades from the current scene to `mounted`, or to nothing. */
   #show(mounted: Mounted | undefined) {
     const at = this.#ctx?.serverNow() ?? Date.now();
-    if (this.#outgoing) this.#unmount(this.#outgoing);
     const old = this.#current;
+    // At most two scenes are visible. With nothing current, a scene still fading out keeps
+    // fading under the new one, e.g. when the screen's clock briefly trails a new anchor.
+    if (this.#outgoing && old) this.#unmount(this.#outgoing);
     this.#current = mounted;
-    this.#outgoing = old;
+    if (old) this.#outgoing = old;
 
     if (old) {
       old.wrapper.dataset.phase = "out";

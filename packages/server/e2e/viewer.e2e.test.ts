@@ -161,6 +161,8 @@ describe.skipIf(!enabled)("viewer", () => {
       await setPlaylist(a);
       await forAll((page) => scene(page, "main").locator(".probe", { hasText: "A" }).waitFor());
 
+      // A long fade, so the outgoing scene can be seen even on a loaded machine.
+      await command("settings.update", { transitionMs: 4_000 });
       await setPlaylist(b);
       await forAll(async (page) => {
         await scene(page, "main", "out").waitFor();
@@ -174,6 +176,7 @@ describe.skipIf(!enabled)("viewer", () => {
         expect(events).toContain("exit A");
         expect(events).toContain("dispose A");
       });
+      await command("settings.update", { transitionMs: 800 });
     },
     TIMEOUT,
   );
