@@ -1,0 +1,16 @@
+{
+  "name": "@storbild/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/main.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@storbild/core": "workspace:*",
+    "hono": "4.13.13"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@storbild/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}

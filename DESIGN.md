@@ -470,6 +470,8 @@ M0 ─► M1 ─► M2 ─┬─► M3 ─┬─► M4 ────────�
 - `deploy/Caddyfile.example` with `screen.<domain>` (basic auth, proxy to :3000) and `admin.<domain>` (proxy to :3001).
 - `docs/decisions/0001-record-architecture-decisions.md`.
 
+Configuration variables, per-package TypeScript settings, lint-enforced import rules and CI (a GitHub Actions workflow run on Forgejo) are specified in [ADR 0002](docs/decisions/0002-configuration-and-tooling.md).
+
 **Done when:** `bun install && bun test && bun run typecheck` pass in CI, and `bun run dev` starts both (empty) Hono apps on their ports.
 
 ### M1 — Core state, persistence and sync

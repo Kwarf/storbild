@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
+  "files": { "includes": ["**", "!**/bun.lock", "!.devcontainer"] },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "linter": { "rules": { "preset": "recommended" } },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
+  "overrides": [
+    {
+      "includes": ["packages/core/**", "!**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["bun", "bun:*", "node:*", "hono", "hono/*", "@storbild/*"],
+                    "message": "packages/core must stay pure: no I/O, no runtime APIs, no other packages."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["plugins/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": ["@storbild/*", "!@storbild/plugin-sdk", "**/packages/**"],
+                    "message": "Built-in plugins may import only @storbild/plugin-sdk. Extend the SDK instead."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
