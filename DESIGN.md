@@ -183,7 +183,7 @@ Recurring cues are out of scope for the first version.
 ```ts
 interface Timeline {
   mode: "auto" | "override";   // override = a manual take or interrupt is active
-  main: { instanceId: string; itemId?: string; startedAt: number; endsAt?: number };
+  main?: { instanceId: string; itemId?: string; startedAt: number; endsAt?: number }; // absent: background only
   next?: { instanceId: string; itemId?: string; startsAt: number };
   interrupt?: { instanceId: string; startedAt: number; endsAt?: number; dimBelow: boolean };
   blackout: boolean;
@@ -300,7 +300,8 @@ The viewer stream receives the full `ShowState`. The plugin modules it needs are
 
 ### 5.3 Admin
 
-- Commands: `POST /api/commands` with `{ type, payload, expectedRevision? }`. The server validates against Zod, applies the command, persists, broadcasts, and returns `{ revision }`. A stale `expectedRevision` on an edit returns `409`, and the client refetches. Last write wins otherwise.
+- Commands: `POST /api/commands` with `{ type, payload, expectedRevision? }`. The server validates against Zod, applies the command, persists, broadcasts, and returns `{ revision }`, plus `id` for commands that create an entity. An invalid body returns `400`, an unknown ID `404`, and a command that doesn't fit the current state `422`. A stale `expectedRevision` returns `409`, and the client refetches. Last write wins otherwise.
+- Deleting an instance also removes the playlist items, overlay placements and cues that reference it, in the same revision.
 - Admin stream: `GET /api/events`, the same protocol as the viewer, behind the session.
 - Typed client: the admin uses Hono's `hc` client typed from the admin app.
 
@@ -315,6 +316,8 @@ overlay.place | overlay.update | overlay.remove
 theme.create | theme.update | theme.delete | theme.activate
 live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 ```
+
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
 
 ---
 
@@ -481,6 +484,7 @@ Configuration variables, per-package TypeScript settings, lint-enforced import r
 - `packages/core`: Zod schemas and types for the whole of §4 (types only for parts implemented later), JSON Patch helpers, and the clock-offset estimator.
 - Server:
   - A command bus with a reducer, revisions, and SQLite persistence of content (instances, playlist, cues, overlays, themes, plugin settings) and a runtime-state checkpoint.
+  - The `instance.*` and `playlist.*` commands. Other commands come with their milestones.
   - Restart restores everything.
 - Viewer SSE `/events` exactly per §5.1, including the ring buffer, `Last-Event-ID` resume, heartbeat and snapshot fallback.
 - `GET /time`.
@@ -489,6 +493,8 @@ Configuration variables, per-package TypeScript settings, lint-enforced import r
 **Done when:** tests cover the reducer, persistence round-trip and patch generation. An integration test connects an SSE client, applies commands, disconnects, reconnects with `Last-Event-ID` and receives exactly the missed patches, or a snapshot when the buffer has rolled past.
 
 **Deferred:** the scheduler (M4); a placeholder timeline is fine.
+
+Mechanics (pure reducer in core, diff-based patches, table layout, resume rules) are specified in [ADR 0003](docs/decisions/0003-state-sync-and-persistence.md).
 
 ### M2 — Plugin SDK and plugin host
 

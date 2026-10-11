@@ -1,1 +1,14 @@
+export * from "./clock.ts";
+export * from "./commands.ts";
 export { type Config, ConfigError, parseConfig } from "./config.ts";
+export * from "./json-patch.ts";
+export * from "./reducer.ts";
+export * from "./schema/asset.ts";
+export * from "./schema/common.ts";
+export * from "./schema/cue.ts";
+export * from "./schema/instance.ts";
+export * from "./schema/overlay.ts";
+export * from "./schema/playlist.ts";
+export * from "./schema/state.ts";
+export * from "./schema/theme.ts";
+export * from "./schema/timeline.ts";

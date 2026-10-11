@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {
+    "@hono/zod-validator": "0.9.1",
     "@storbild/core": "workspace:*",
-    "hono": "4.13.13"
+    "hono": "4.13.13",
+    "zod": "4.6.5"
   }
 }
