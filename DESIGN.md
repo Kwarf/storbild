@@ -102,8 +102,7 @@ storbild/
 │   ├── slideshow/
 │   ├── countdown/
 │   ├── announcement/
-│   ├── info/
-│   └── now-playing/
+│   └── info/
 └── deploy/
     ├── Caddyfile.example
     ├── storbild.service       # systemd unit
@@ -434,12 +433,13 @@ A plugin package's `exports["."]` is the definition module above, which only the
 
 | Plugin | Types | Notes |
 |---|---|---|
-| `markdown` | scene `text` | Title plus markdown body; theme typography |
+| `markdown` | scene `text` | Title plus markdown body (`marked`, sanitized with DOMPurify); theme typography; shrinks to fit. Polished in M9 |
 | `slideshow` | scene `images` | Multiple images; duration = count × per-image time; `background: "own"`. Built in M6b |
-| `countdown` | scene `countdown`, overlay `countdown` | Target time; renders `target − serverNow()` |
+| `countdown` | scene `countdown`, overlay `widget` | Target time; renders `target − serverNow()`; the overlay hides a while after the target. Built in M9 |
 | `announcement` | scene `announcement` | Big-text message on an opaque panel; intended for interrupts and takes. Built in M6b |
-| `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code; clock. The clock is built in M8 |
-| `now-playing` | overlay `now-playing` (singleton) | Server part consumes an upstream **SSE stream** (URL in settings) and writes the track to plugin state; stale-hide. Low priority for details |
+| `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code, with a custom editor that previews it; clock. The clock is built in M8, Wi-Fi in M9 |
+
+`now-playing` (an overlay fed by an upstream SSE stream) will be an external plugin in its own repository, because its upstream service is private ([ADR 0015](docs/decisions/0015-built-in-plugins.md)). Plugin dependencies, rendering and the countdown and Wi-Fi rules are specified there too.
 
 ---
 
@@ -677,9 +677,11 @@ The commands, the slot grid, reservations, fading, the `staleAt()` hook, the clo
 Implement the plugins in §6.4 using only the public SDK, each with tests:
 
 - `markdown` (polish the M2 fixture), `countdown` (scene and overlay), `info` (Wi-Fi with QR). `announcement` and `slideshow` are built in M6b, and `info`'s clock in M8.
-- `now-playing`: the server part consumes an upstream SSE stream from a URL in settings, maps events to `{ artist, title }` in plugin state, reconnects with backoff, and stale-hides. Mapping details stay flexible.
+- `now-playing` is deferred: it will be an external plugin in its own repository.
 
 **Done when:** each plugin works in a real show, adapts to theme changes, and appears correctly in the admin with generated or custom forms.
+
+Markdown rendering, plugin dependencies, the countdown, the Wi-Fi QR code and its editor, and the deferral of `now-playing` are specified in [ADR 0015](docs/decisions/0015-built-in-plugins.md).
 
 ### M10 — Hardening, operations and release
 
@@ -709,4 +711,3 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- The exact upstream event format for `now-playing` (to be defined when the music service is known).

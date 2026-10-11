@@ -1,13 +1,14 @@
 {
   "name": "@storbild/plugin-info",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/plugin.ts"
   },
   "storbild": {
-    "viewer": "./src/viewer.ts"
+    "viewer": "./src/viewer.ts",
+    "admin": "./src/admin.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json"
@@ -19,5 +20,8 @@
   "devDependencies": {
     "@storbild/plugin-sdk": "workspace:*",
     "lit": "3.3.3"
+  },
+  "dependencies": {
+    "uqr": "0.1.3"
   }
 }

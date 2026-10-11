@@ -156,8 +156,8 @@ describe("plugin host", () => {
   test("loads built-in and external plugins", () => {
     expect(plugin("markdown")).toMatchObject({
       status: "ok",
-      version: "0.2.0",
-      module: "/plugins/markdown/0.2.0/viewer.js",
+      version: "0.3.0",
+      module: "/plugins/markdown/0.3.0/viewer.js",
       settings: { fontScale: 1 },
       types: { text: { kind: "scene", label: "Markdown text", viewer: "sb-markdown-scene" } },
     });
@@ -356,6 +356,48 @@ describe("external plugin (M2 acceptance)", () => {
     await command("instance.delete", { id: clock.body.id });
   });
 
+  test("built-in countdown and info Wi-Fi load and validate their config", async () => {
+    expect(plugin("countdown")).toMatchObject({
+      status: "ok",
+      module: "/plugins/countdown/0.1.0/viewer.js",
+      types: {
+        countdown: { kind: "scene", viewer: "sb-countdown-scene" },
+        widget: { kind: "overlay", viewer: "sb-countdown-widget" },
+      },
+    });
+    expect(plugin("info")).toMatchObject({
+      status: "ok",
+      adminModule: "/plugins/info/0.2.0/admin.js",
+      types: { wifi: { kind: "overlay", viewer: "sb-info-wifi", editor: "sb-info-wifi-editor" } },
+    });
+
+    const create = (plugin: string, type: string, config: unknown) =>
+      command("instance.create", { plugin, type, name: `${plugin}/${type}`, config });
+    expect((await create("countdown", "countdown", { title: "Compo" })).status).toBe(422);
+    expect((await create("info", "wifi", { ssid: "" })).status).toBe(422);
+
+    const target = Date.UTC(2026, 9, 11, 20, 0, 0);
+    const widget = await create("countdown", "widget", { target });
+    const wifi = await create("info", "wifi", { ssid: "party", password: "demoscene" });
+    expect(storbild.hub.state.instances[widget.body.id as string]?.config).toEqual({
+      target,
+      hideAfterMs: 300_000,
+    });
+    expect(storbild.hub.state.instances[wifi.body.id as string]?.config).toEqual({
+      ssid: "party",
+      password: "demoscene",
+      security: "WPA",
+      hidden: false,
+      showPassword: true,
+    });
+    for (const created of [widget, wifi]) {
+      expect(
+        (await command("overlay.place", { instanceId: created.body.id, slot: "top-right" })).status,
+      ).toBe(200);
+      await command("instance.delete", { id: created.body.id });
+    }
+  });
+
   test("server part writes plugin state that arrives as a patch on /events", async () => {
     const client = await SseClient.connect(new URL("/events", storbild.viewer.url));
     clients.push(client);
@@ -463,6 +505,25 @@ describe("schemas", () => {
         },
       },
     });
+    expect(schemas.countdown).toMatchObject({
+      types: {
+        countdown: { properties: { target: { "x-storbild-widget": "datetime" } } },
+        widget: {
+          properties: {
+            target: { "x-storbild-widget": "datetime" },
+            hideAfterMs: { "x-storbild-widget": "duration", default: 300_000 },
+          },
+        },
+      },
+    });
+    expect(schemas.info).toMatchObject({
+      types: {
+        wifi: {
+          required: expect.arrayContaining(["ssid"]),
+          properties: { security: { enum: ["WPA", "WEP", "none"], default: "WPA" } },
+        },
+      },
+    });
     expect(schemas.incompatible).toBeUndefined();
   });
 });
@@ -470,7 +531,7 @@ describe("schemas", () => {
 describe("modules", () => {
   test("serve each plugin's viewer module with host modules left external", async () => {
     for (const app of [storbild.viewer, storbild.admin]) {
-      const res = await fetch(new URL("/plugins/markdown/0.2.0/viewer.js", app.url));
+      const res = await fetch(new URL("/plugins/markdown/0.3.0/viewer.js", app.url));
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/javascript");
       expect(res.headers.get("Cache-Control")).toContain("immutable");
@@ -479,6 +540,16 @@ describe("modules", () => {
       expect(code).toContain('from "@storbild/plugin-sdk/viewer"');
       expect(code).toContain('customElements.define("sb-markdown-scene"');
     }
+    // Plugins' own dependencies are bundled in; only the host modules stay external.
+    const markdown = await (
+      await fetch(new URL("/plugins/markdown/0.3.0/viewer.js", storbild.viewer.url))
+    ).text();
+    expect(markdown).not.toMatch(/from\s*"(marked|dompurify)"/);
+    const editor = await fetch(new URL("/plugins/info/0.2.0/admin.js", storbild.admin.url));
+    expect(editor.status).toBe(200);
+    const editorCode = await editor.text();
+    expect(/import\s*"@storbild\/plugin-sdk\/admin"/.test(editorCode)).toBe(true);
+    expect(editorCode.includes('customElements.define("sb-info-wifi-editor"')).toBe(true);
     const external = await fetch(new URL("/plugins/external/1.2.3/viewer.js", storbild.viewer.url));
     expect(external.status).toBe(200);
     for (const path of ["/plugins/markdown/9.9.9/viewer.js", "/plugins/nope/1.0.0/viewer.js"]) {

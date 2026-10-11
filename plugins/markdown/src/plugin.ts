@@ -2,7 +2,7 @@ import { API_VERSION, definePlugin, fields, z } from "@storbild/plugin-sdk";
 
 export default definePlugin({
   id: "markdown",
-  version: "0.2.0",
+  version: "0.3.0",
   apiVersion: API_VERSION,
   settings: z.object({ fontScale: z.number().positive().default(1) }),
   types: {

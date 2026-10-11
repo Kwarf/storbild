@@ -1,12 +1,23 @@
 import type { PluginConfig, PluginSettings } from "@storbild/plugin-sdk";
 import { StorbildScene } from "@storbild/plugin-sdk/viewer";
-import { css, html } from "lit";
+import DOMPurify from "dompurify";
+import { css, html, type PropertyValues } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import type plugin from "./plugin.ts";
+import { renderMarkdown } from "./render.ts";
 
 type Config = PluginConfig<typeof plugin, "text">;
 type Settings = PluginSettings<typeof plugin>;
 
-/** Title and body text. Renders the body as plain text until markdown support (M9). */
+/** How far the text may shrink to fit, as a fraction of `fontScale`, and the step. */
+const MIN_FIT = 0.4;
+const FIT_STEP = 0.92;
+
+/** Markdown is rendered and then sanitized; raw HTML may be in it (ADR 0015). */
+const sanitize = (markdown: string) =>
+  DOMPurify.sanitize(renderMarkdown(markdown), { FORBID_TAGS: ["iframe", "form", "style"] });
+
+/** A title and a markdown body in the theme's typography, shrunk until it fits the screen. */
 export class MarkdownScene extends StorbildScene<Config, Settings> {
   static override styles = css`
     :host {
@@ -19,25 +30,146 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
       color: var(--sb-color-text, #fff);
       font-family: var(--sb-font-body, sans-serif);
     }
+    .content {
+      max-height: 100%;
+      overflow: hidden;
+      font-size: calc(48px * var(--scale, 1));
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0 0 0.4em;
+      font-family: var(--sb-font-heading, sans-serif);
+      line-height: 1.1;
+    }
+    .title,
     h1 {
+      font-size: 2em;
+    }
+    h2 {
+      font-size: 1.5em;
+    }
+    h3,
+    h4 {
+      font-size: 1.15em;
+    }
+    .title {
       margin: 0 0 0.5em;
       font-family: var(--sb-font-heading, sans-serif);
-      font-size: calc(96px * var(--scale));
+      line-height: 1.1;
     }
-    p {
-      margin: 0;
+    p,
+    ul,
+    ol,
+    blockquote,
+    pre,
+    table {
+      margin: 0 0 0.6em;
+    }
+    .body > :last-child {
+      margin-bottom: 0;
+    }
+    ul,
+    ol {
+      padding-left: 1.2em;
+    }
+    li::marker {
+      color: var(--sb-color-accent, #e8a33d);
+    }
+    a {
+      color: var(--sb-color-accent, #e8a33d);
+      text-decoration: none;
+    }
+    strong {
+      font-weight: 700;
+    }
+    blockquote {
+      padding: 0.3em 0.8em;
+      border-left: 0.2em solid var(--sb-color-accent, #e8a33d);
+      background: var(--sb-color-surface, #15171c);
+    }
+    blockquote > :last-child {
+      margin-bottom: 0;
+    }
+    code {
+      padding: 0 0.2em;
+      font-family: var(--sb-font-mono, monospace);
+      font-size: 0.9em;
+      background: var(--sb-color-surface, #15171c);
+      border-radius: 4px;
+    }
+    pre {
+      padding: 0.5em 0.7em;
+      background: var(--sb-color-surface, #15171c);
+      border-radius: 8px;
       white-space: pre-wrap;
-      font-size: calc(48px * var(--scale));
+    }
+    pre code {
+      padding: 0;
+      background: none;
+    }
+    table {
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    th,
+    td {
+      padding: 0.2em 0.8em 0.2em 0;
+      text-align: left;
+    }
+    th {
+      font-family: var(--sb-font-heading, sans-serif);
+      color: var(--sb-color-muted, #9aa0aa);
+    }
+    hr {
+      margin: 0.8em 0;
+      border: 0;
+      border-top: 2px solid var(--sb-color-muted, #9aa0aa);
+    }
+    img {
+      max-width: 100%;
+      max-height: 60vh;
     }
   `;
 
+  /** Bumped on every fit, so a fit waiting for images gives way to a newer one. */
+  #fitting = 0;
+
+  protected override updated(changes: PropertyValues<this>) {
+    if (changes.has("config") || changes.has("settings")) void this.#fit();
+  }
+
+  override async prepare() {
+    await this.updateComplete;
+    await this.#fit();
+  }
+
+  /** Waits for the body's images, then steps `--scale` down until the content fits. */
+  async #fit() {
+    const run = ++this.#fitting;
+    const content = this.renderRoot.querySelector<HTMLElement>(".content");
+    if (!content) return;
+    await Promise.all(
+      [...content.querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)),
+    );
+    if (run !== this.#fitting) return;
+    const full = this.settings.fontScale;
+    let scale = full;
+    content.style.setProperty("--scale", String(scale));
+    while (scale > full * MIN_FIT && content.scrollHeight > content.clientHeight + 1) {
+      scale *= FIT_STEP;
+      content.style.setProperty("--scale", String(scale));
+    }
+  }
+
   override render() {
-    return html`
-      <div style="--scale: ${this.settings.fontScale}">
-        ${this.config.title ? html`<h1>${this.config.title}</h1>` : null}
-        <p>${this.config.content}</p>
-      </div>
-    `;
+    return html`<div class="content">
+      ${this.config.title ? html`<h1 class="title">${this.config.title}</h1>` : null}
+      <div class="body">${unsafeHTML(sanitize(this.config.content))}</div>
+    </div>`;
   }
 }
 
