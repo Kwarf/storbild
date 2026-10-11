@@ -59,6 +59,23 @@ export function groupInstances(state: ShowState): InstanceGroup[] {
     .sort(byName);
 }
 
+/** The kinds the Library and the type picker split into, in order (scenes first). */
+export const kindSections = [
+  { kind: "scene", label: "Scenes" },
+  { kind: "overlay", label: "Overlays" },
+  // Instances whose plugin no longer describes their type.
+  { kind: undefined, label: "Unavailable" },
+] as const satisfies readonly { kind: InstanceKind | undefined; label: string }[];
+
+/** Splits items by kind, in `kindSections` order, leaving out empty sections. */
+export function byKind<T extends { kind: InstanceKind | undefined }>(
+  items: readonly T[],
+): { label: string; kind: InstanceKind | undefined; items: T[] }[] {
+  return kindSections
+    .map(({ kind, label }) => ({ kind, label, items: items.filter((item) => item.kind === kind) }))
+    .filter((section) => section.items.length > 0);
+}
+
 /** How many playlist items show the instance. */
 export function rotationCount(state: ShowState, instanceId: string): number {
   return state.playlist.items.filter((item) => item.instanceId === instanceId).length;

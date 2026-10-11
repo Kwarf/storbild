@@ -10,7 +10,9 @@ import "./asset-panel.ts";
 import { sizeText } from "./asset-panel.ts";
 import { uploadAsset } from "./assets.ts";
 import {
+  byKind,
   groupInstances,
+  type InstanceGroup,
   previewState,
   rotationCount,
   sameValue,
@@ -93,8 +95,19 @@ export class LibraryPage extends LitElement {
         gap: 8px;
         margin-bottom: 12px;
       }
+      .kind + .kind,
+      .kind + .files {
+        margin-top: 28px;
+      }
+      .kind > h2,
+      .files h2 {
+        font-size: var(--sb-text-md);
+      }
       .group {
         margin-top: 14px;
+      }
+      .kind > h2 + .group {
+        margin-top: 8px;
       }
       .group h3 {
         margin: 0;
@@ -200,8 +213,8 @@ export class LibraryPage extends LitElement {
         gap: 8px;
         border-bottom: 1px solid var(--sb-line);
       }
-      .group-head h3 {
-        border-bottom: 0;
+      .group-head h2 {
+        padding-bottom: 4px;
       }
       .group-head button {
         margin-bottom: 4px;
@@ -284,30 +297,10 @@ export class LibraryPage extends LitElement {
       ${
         groups.length === 0
           ? html`<p class="empty">No instances yet. Create one to show it on screen.</p>`
-          : groups.map(
-              (group) => html`<section class="group" data-group=${group.key}>
-                <h3>${group.label}</h3>
-                <ul>
-                  ${group.instances.map((instance) => {
-                    const uses = rotationCount(state, instance.id);
-                    return html`<li>
-                      <button
-                        aria-current=${this.selected === instance.id ? "true" : "false"}
-                        data-instance=${instance.id}
-                        @click=${() => this.#select(instance.id)}
-                      >
-                        <span class="name">${instance.name}</span>
-                        ${
-                          instance.error !== undefined
-                            ? html`<span class="badge error">Broken</span>`
-                            : uses > 0
-                              ? html`<span class="meta num">In rotation${uses > 1 ? ` ×${uses}` : ""}</span>`
-                              : nothing
-                        }
-                      </button>
-                    </li>`;
-                  })}
-                </ul>
+          : byKind(groups).map(
+              (section) => html`<section class="kind" data-kind=${section.kind ?? "unavailable"}>
+                <h2>${section.label}</h2>
+                ${section.items.map((group) => this.#group(state, group))}
               </section>`,
             )
       }
@@ -315,11 +308,38 @@ export class LibraryPage extends LitElement {
     </div>`;
   }
 
+  #group(state: ShowState, group: InstanceGroup) {
+    return html`<section class="group" data-group=${group.key}>
+      <h3>${group.label}</h3>
+      <ul>
+        ${group.instances.map((instance) => {
+          const uses = rotationCount(state, instance.id);
+          return html`<li>
+            <button
+              aria-current=${this.selected === instance.id ? "true" : "false"}
+              data-instance=${instance.id}
+              @click=${() => this.#select(instance.id)}
+            >
+              <span class="name">${instance.name}</span>
+              ${
+                instance.error !== undefined
+                  ? html`<span class="badge error">Broken</span>`
+                  : uses > 0
+                    ? html`<span class="meta num">In rotation${uses > 1 ? ` ×${uses}` : ""}</span>`
+                    : nothing
+              }
+            </button>
+          </li>`;
+        })}
+      </ul>
+    </section>`;
+  }
+
   #files(state: ShowState) {
     const assets = Object.values(state.assets).sort((a, b) => a.name.localeCompare(b.name));
-    return html`<section class="group" data-group="files">
+    return html`<section class="group files" data-group="files">
       <div class="group-head">
-        <h3>Files</h3>
+        <h2>Files</h2>
         <button
           ?disabled=${this.uploading}
           @click=${() => this.renderRoot.querySelector<HTMLInputElement>("input[type=file]")?.click()}
@@ -461,11 +481,15 @@ export class LibraryPage extends LitElement {
                 }}
               >
                 <option value="" selected>Choose a type…</option>
-                ${choices.map(
-                  (choice, i) =>
-                    html`<option value=${i} ?disabled=${choice.taken}>
-                      ${choice.label}${choice.kind === "overlay" ? " (overlay)" : ""}${choice.taken ? " (exists)" : ""}
-                    </option>`,
+                ${byKind(choices).map(
+                  (section) => html`<optgroup label=${section.label}>
+                    ${section.items.map(
+                      (choice) =>
+                        html`<option value=${choices.indexOf(choice)} ?disabled=${choice.taken}>
+                          ${choice.label}${choice.taken ? " (exists)" : ""}
+                        </option>`,
+                    )}
+                  </optgroup>`,
                 )}
               </select>
               <button @click=${() => this.#select(undefined)}>Cancel</button>

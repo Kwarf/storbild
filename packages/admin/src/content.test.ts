@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createInitialState, resolveTimeline, type ShowState } from "@storbild/core";
 import {
+  byKind,
   fromLocalInput,
   groupInstances,
   move,
@@ -67,6 +68,18 @@ describe("content helpers", () => {
       ["Markdown text", ["Food", "Rules"]],
       ["Now playing", ["Track"]],
     ]);
+  });
+
+  test("byKind splits into scenes, overlays and unavailable, leaving out empty ones", () => {
+    const sections = byKind(groupInstances(show()));
+    expect(sections.map((s) => [s.label, s.items.map((g) => g.label)])).toEqual([
+      ["Scenes", ["Markdown text"]],
+      ["Overlays", ["Now playing"]],
+      ["Unavailable", ["gone/x"]],
+    ]);
+    expect(
+      byKind(typeChoices(show()).filter((c) => c.kind === "scene")).map((s) => s.label),
+    ).toEqual(["Scenes"]);
   });
 
   test("rotationCount", () => {

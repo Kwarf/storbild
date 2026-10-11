@@ -478,7 +478,7 @@ Sync client, bundling and failure handling are specified in [ADR 0005](docs/deci
   - **Blackout:** a guarded control (hold to activate).
 - **Rotation:** dense rows with drag-to-reorder, inline duration and enabled toggle, and time windows.
 - **Schedule:** a day-ordered list of cues.
-- **Library:** instances grouped by type. The right-hand panel edits the selected instance and shows a live preview.
+- **Library:** instances split into scenes and overlays, then grouped by type; the new-instance type picker is split the same way. The right-hand panel edits the selected instance and shows a live preview.
 - **Overlays:** a slot diagram plus the placement list.
 - **Theme:** a theme editor with live preview, and activation.
 - **Plugins:** status and settings per plugin.

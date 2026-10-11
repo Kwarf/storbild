@@ -120,7 +120,9 @@ overlay that shows `serverNow()` as 24-hour time:
     select, move toward the edge or centre, and remove. Rows can be dragged within and across
     slots, and onto the diagram.
   - A bar to place an unplaced overlay instance in a slot.
-- **Library:** previews an overlay alone in its slot, or in `bottom-right` while it isn't
+- **Library:** the instance list and the new-instance type picker are split into Scenes and
+  Overlays (and Unavailable, for instances whose plugin is gone), then grouped by type. It
+  previews an overlay alone in its slot, or in `bottom-right` while it isn't
   placed. Scene previews no longer show the placed overlays, so the preview shows only the
   instance being edited.
 - **Strip:** the Overlays row leaves out widgets in reserved slots.

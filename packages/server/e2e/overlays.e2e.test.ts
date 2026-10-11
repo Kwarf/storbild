@@ -89,7 +89,7 @@ describe.skipIf(!enabled)("overlays", () => {
         ["Clock with seconds", true],
       ] as const) {
         await admin.getByRole("button", { name: "New instance" }).click();
-        await editor().getByLabel("Instance type").selectOption({ label: "Clock (overlay)" });
+        await editor().getByLabel("Instance type").selectOption({ label: "Clock" });
         await editor().getByLabel("Name").fill(name);
         if (seconds) await editor().getByLabel("Seconds").check();
         // The Library previews a widget in its slot.
@@ -98,6 +98,17 @@ describe.skipIf(!enabled)("overlays", () => {
         await until(() => named(name) !== undefined);
       }
       expect(named("Clock with seconds")?.config).toEqual({ seconds: true });
+      // The type picker and the list split scenes from overlays.
+      await admin.getByRole("button", { name: "New instance" }).click();
+      expect(
+        await editor()
+          .getByLabel("Instance type")
+          .locator("optgroup")
+          .evaluateAll((groups) => groups.map((g) => g.getAttribute("label"))),
+      ).toEqual(["Scenes", "Overlays"]);
+      await editor().getByRole("button", { name: "Cancel" }).click();
+      await admin.locator('[data-kind="overlay"] [data-group="info/clock"] li').nth(1).waitFor();
+      await shot(admin, "library-kinds");
 
       await go("Overlays");
       for (const name of ["Clock", "Clock with seconds"]) {
