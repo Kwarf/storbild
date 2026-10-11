@@ -371,4 +371,33 @@ describe.skipIf(!enabled)("built-in plugins", () => {
     },
     TIMEOUT,
   );
+
+  test(
+    "a markdown widget shows sanitized markdown in its slot, aligned",
+    async () => {
+      await go("Library");
+      await newInstance("Overlays", "Markdown text", "Entries");
+      await editor()
+        .getByLabel("Content")
+        .fill('Entries close at **18:00**\n\n<img src="x" onerror="window.__pwned = true">');
+      await editor().getByLabel("Alignment").selectOption("center");
+      await create("Entries");
+      expect(named("Entries")?.config).toEqual({
+        content: 'Entries close at **18:00**\n\n<img src="x" onerror="window.__pwned = true">',
+        align: "center",
+      });
+
+      await place("Entries", "Bottom left");
+      const strong = widget("Entries").locator("sb-markdown-widget strong");
+      await strong.filter({ hasText: "18:00" }).waitFor();
+      expect(await strong.evaluate((el) => getComputedStyle(el).textAlign)).toBe("center");
+      expect(
+        await widget("Entries").locator("sb-markdown-widget img").getAttribute("onerror"),
+      ).toBeNull();
+      expect(await screen.evaluate(() => (window as { __pwned?: boolean }).__pwned)).toBe(
+        undefined,
+      );
+    },
+    TIMEOUT,
+  );
 });

@@ -1,8 +1,11 @@
 import { API_VERSION, definePlugin, fields, z } from "@storbild/plugin-sdk";
 
+const align = () =>
+  z.enum(["left", "center", "right"]).default("left").meta({ title: "Alignment" });
+
 export default definePlugin({
   id: "markdown",
-  version: "0.5.0",
+  version: "0.6.0",
   apiVersion: API_VERSION,
   settings: z.object({ fontScale: z.number().positive().default(1) }),
   types: {
@@ -12,7 +15,7 @@ export default definePlugin({
       // No duration of its own: text runs for the show's default duration.
       config: z.object({
         content: fields.markdown(),
-        align: z.enum(["left", "center", "right"]).default("left").meta({ title: "Alignment" }),
+        align: align(),
         verticalAlign: z
           .enum(["top", "center", "bottom"])
           .default("center")
@@ -27,6 +30,12 @@ export default definePlugin({
         return { content: title ? `# ${title}\n\n${content}` : content };
       },
       viewer: "sb-markdown-scene",
+    },
+    widget: {
+      kind: "overlay",
+      label: "Markdown text",
+      config: z.object({ content: fields.markdown(), align: align() }),
+      viewer: "sb-markdown-widget",
     },
   },
 });
