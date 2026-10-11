@@ -198,6 +198,11 @@ describe.skipIf(!enabled)("assets, schedule and quick announce", () => {
       await admin.getByText("Nothing is scheduled.").waitFor();
       const form = admin.getByLabel("New cue");
       const at = Date.now() + 4_000;
+      // The time starts at the current minute.
+      const minute = (ms: number) => toLocalInput(ms).slice(0, "yyyy-mm-ddThh:mm".length);
+      expect([minute(Date.now()), minute(Date.now() - 60_000)]).toContain(
+        await form.getByLabel("At", { exact: true }).inputValue(),
+      );
       await form.getByLabel("At", { exact: true }).fill(toLocalInput(at));
       await form
         .getByLabel("Scene", { exact: true })

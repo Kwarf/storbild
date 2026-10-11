@@ -700,7 +700,9 @@ export class LibraryPage extends LitElement {
       plugin: choice.plugin,
       type: choice.type,
       name: "",
-      config: schema ? (initialValue(describeForm(schema)) ?? {}) : {},
+      config: schema
+        ? (initialValue(describeForm(schema), { now: this.ctx?.serverNow() }) ?? {})
+        : {},
     };
     this.editorReady = undefined;
   }

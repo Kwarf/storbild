@@ -67,6 +67,13 @@ literal.
 - **Redrawing.** Both redraw on a timer aligned to the target's second boundaries, using
   `ctx.serverNow()`.
 
+**Date-time fields start at the current time.** A required `fields.datetime()` in a new
+instance starts at the current server time, rounded down to the minute, and so does the
+Schedule page's time for a new cue, also after each cue is added. During a party a countdown
+or cue is usually later the same day, so the operator only changes the hour and minute.
+`initialValue(field, { now })` in the SDK takes the time. Without it, as in a list's new
+item, the field stays unset. Existing instances and cues keep their stored times.
+
 **Wi-Fi.** The `info` plugin gains a `wifi` overlay.
 
 - **Config.** `{ ssid, password?, security: "WPA" | "WEP" | "none", hidden, showPassword,

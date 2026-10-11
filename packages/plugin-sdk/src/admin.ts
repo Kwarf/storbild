@@ -18,6 +18,7 @@ export {
   type Field,
   type FieldKind,
   humanize,
+  type InitialOptions,
   initialValue,
   type JsonSchema,
 } from "./form-model.ts";

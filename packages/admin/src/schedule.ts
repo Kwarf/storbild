@@ -102,8 +102,9 @@ export interface CueDraft {
   below: InterruptBelow;
 }
 
-export const emptyDraft = (): CueDraft => ({
-  at: "",
+/** A new cue's draft, at `at` (a `datetime-local` value) if given. */
+export const emptyDraft = (at = ""): CueDraft => ({
+  at,
   type: "interrupt",
   instanceId: "",
   themeId: "",

@@ -218,18 +218,23 @@ function resolveRef(root: JsonSchema, ref: string): JsonSchema | undefined {
   return isObject(node) ? node : undefined;
 }
 
+export interface InitialOptions {
+  /** The current server time. Required date-time fields start at it, to the minute. */
+  now?: number | undefined;
+}
+
 /**
  * A starting value for a field: its default, else an empty value of its kind for required
  * fields, else `undefined` (left out).
  */
-export function initialValue(field: Field): unknown {
+export function initialValue(field: Field, options: InitialOptions = {}): unknown {
   if (field.default !== undefined) return structuredClone(field.default);
   if (!field.required) return undefined;
   switch (field.kind) {
     case "object":
       return Object.fromEntries(
         field.properties.flatMap(({ key, field: child }) => {
-          const value = initialValue(child);
+          const value = initialValue(child, options);
           return value === undefined ? [] : [[key, value]];
         }),
       );
@@ -243,6 +248,9 @@ export function initialValue(field: Field): unknown {
       return false;
     case "select":
       return field.options[0]?.value;
+    case "datetime":
+      if (options.now !== undefined) return Math.floor(options.now / 60_000) * 60_000;
+      return field.nullable ? null : undefined;
     default:
       return field.nullable ? null : undefined;
   }

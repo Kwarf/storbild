@@ -3,6 +3,7 @@ import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import { errorText, send } from "./api.ts";
+import { toLocalInput } from "./content.ts";
 import {
   actionText,
   belowLabels,
@@ -166,6 +167,22 @@ export class SchedulePage extends LitElement {
     super();
     this.drafts = { [ADD]: emptyDraft() };
     this.errors = {};
+  }
+
+  /** The add form's time starts at the current time, once the clock is known. */
+  #seeded = false;
+
+  #now(): string {
+    const now = this.ctx?.serverNow();
+    return now === undefined ? "" : toLocalInput(Math.floor(now / 60_000) * 60_000);
+  }
+
+  protected override willUpdate() {
+    if (this.#seeded || !this.ctx) return;
+    this.#seeded = true;
+    const draft = this.drafts[ADD];
+    if (draft && draft.at === "")
+      this.drafts = { ...this.drafts, [ADD]: { ...draft, at: this.#now() } };
   }
 
   override connectedCallback() {
@@ -399,8 +416,8 @@ export class SchedulePage extends LitElement {
     );
     if (!ok) return;
     if (key === ADD) {
-      // Keep the scene and action for the next cue; the time is rarely the same.
-      this.drafts = { ...this.drafts, [ADD]: { ...draft, at: "" } };
+      // Keep the scene and action for the next cue; the time starts over at the current time.
+      this.drafts = { ...this.drafts, [ADD]: { ...draft, at: this.#now() } };
     } else {
       this.#close(key);
     }

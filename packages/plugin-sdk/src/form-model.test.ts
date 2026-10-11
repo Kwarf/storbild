@@ -173,6 +173,14 @@ test("humanize", () => {
   expect(humanize("qr-code")).toBe("Qr code");
 });
 
+test("initialValue starts required date-time fields at the current time, to the minute", () => {
+  const form = formOf(z.object({ target: fields.datetime(), until: fields.datetime().optional() }));
+  const now = Date.UTC(2026, 9, 11, 21, 37, 42, 500);
+  expect(initialValue(form, { now })).toEqual({ target: Date.UTC(2026, 9, 11, 21, 37) });
+  // Without the time it stays unset, as before.
+  expect(initialValue(form)).toEqual({});
+});
+
 test("initialValue fills required fields and defaults, and leaves optional ones out", () => {
   const form = formOf(
     z.object({

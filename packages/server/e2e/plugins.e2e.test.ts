@@ -253,6 +253,10 @@ describe.skipIf(!enabled)("built-in plugins", () => {
       await go("Library");
       await newInstance("Scenes", "Countdown", "Demo compo");
       await editor().getByLabel("Title").fill("Demo compo starts in");
+      // A new countdown starts at the current minute, so usually only the hour changes.
+      const minute = (at: number) => toLocalInput(Math.floor(at / 60_000) * 60_000);
+      const prefilled = await editor().getByLabel("Counts down to").inputValue();
+      expect([minute(Date.now()), minute(Date.now() - 60_000)]).toContain(prefilled);
       // Whole minutes, an hour and a bit ahead, so the screen shows 1:0M:SS.
       const target = Math.ceil(Date.now() / 60_000) * 60_000 + 3_600_000;
       await editor().getByLabel("Counts down to").fill(toLocalInput(target));
