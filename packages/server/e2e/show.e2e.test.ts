@@ -126,8 +126,8 @@ describe.skipIf(!enabled)("assets, schedule and quick announce", () => {
       const [asset] = Object.values(state().assets);
       const id = asset?.id as string;
       expect(asset).toMatchObject({ name: "sponsor.png", mimeType: "image/png", width: 320 });
-      // The admin made a thumbnail in the browser.
-      expect(asset?.thumbnail).toBe(true);
+      // The admin made a thumbnail in the browser; it follows the file in a second request.
+      await until(() => state().assets[id]?.thumbnail === true);
       await editor().locator("sb-asset-picker .name", { hasText: "sponsor.png" }).waitFor();
       await editor().locator("sb-slideshow img.shown").waitFor();
       // Decoded, not just sized: the thumbnail made from it has pixels too.
