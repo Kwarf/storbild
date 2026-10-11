@@ -314,6 +314,81 @@ describe.skipIf(!enabled)("viewer", () => {
     },
     TIMEOUT,
   );
+
+  test(
+    "two widgets stack in bottom-right; a scene reserving the slot hides them until it ends",
+    async () => {
+      await setPlaylist(markdown);
+      const widget = async (label: string, height: number) => {
+        const id = (await command("instance.create", {
+          plugin: "probe",
+          type: "widget",
+          name: label,
+          config: { label, height },
+        })) as string;
+        await command("overlay.place", { instanceId: id, slot: "bottom-right" });
+        return id;
+      };
+      const a = await widget("A", 80);
+      const b = await widget("B", 120);
+      const corner = (await command("instance.create", {
+        plugin: "probe",
+        type: "corner",
+        name: "Corner",
+        config: { label: "Corner" },
+      })) as string;
+      const box = (page: Page, id: string) =>
+        page.locator(`sb-compositor .widget[data-widget="${id}"]`);
+      const phase = (id: string, value: string) =>
+        forAll((page) =>
+          box(page, id)
+            .and(page.locator(`[data-phase="${value}"]`))
+            .waitFor({ state: "attached" }),
+        );
+
+      await phase(a, "shown");
+      await phase(b, "shown");
+      // On the full-size screen the canvas is unscaled: 96 px safe area, 24 px gap, order 0 in
+      // the corner and the next one above it.
+      const big = screens[0]?.page as Page;
+      const boxA = await box(big, a).boundingBox();
+      const boxB = await box(big, b).boundingBox();
+      if (!boxA || !boxB) throw new Error("no boxes");
+      expect(boxA.x + boxA.width).toBeCloseTo(1920 - 96, 0);
+      expect(boxA.y + boxA.height).toBeCloseTo(1080 - 96, 0);
+      expect(boxB.x + boxB.width).toBeCloseTo(1920 - 96, 0);
+      expect(boxB.y + boxB.height).toBeCloseTo(boxA.y - 24, 0);
+      expect(boxB.height).toBeCloseTo(120, 0);
+
+      await command("live.take", { instanceId: corner });
+      await forAll((page) => scene(page, "main").locator(".probe-corner").waitFor());
+      await phase(a, "hidden");
+      await phase(b, "hidden");
+
+      await command("live.resume", {});
+      await phase(a, "shown");
+      await phase(b, "shown");
+
+      // A stale widget leaves the stack and the next one closes the gap.
+      await command("instance.update", {
+        id: a,
+        config: { label: "A", height: 80, staleAt: 1 },
+      });
+      await phase(a, "hidden");
+      for (let i = 0; ; i++) {
+        const moved = await box(big, b).boundingBox();
+        if (moved && Math.round(moved.y + moved.height) === 1080 - 96) break;
+        if (i > 50) throw new Error(`B did not close the gap: ${JSON.stringify(moved)}`);
+        await big.waitForTimeout(100);
+      }
+
+      // Hidden in the admin: faded out and removed.
+      await command("overlay.update", { instanceId: b, visible: false });
+      await forAll((page) => box(page, b).waitFor({ state: "detached" }));
+      expect(await Promise.all(screens.map(({ page }) => bootId(page)))).toEqual(boots);
+    },
+    TIMEOUT,
+  );
 });
 
 declare global {

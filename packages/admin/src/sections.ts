@@ -4,7 +4,7 @@ export const sections = [
   { path: "/rotation", label: "Rotation" },
   { path: "/schedule", label: "Schedule" },
   { path: "/library", label: "Library" },
-  { path: "/overlays", label: "Overlays", milestone: "M8" },
+  { path: "/overlays", label: "Overlays" },
   { path: "/theme", label: "Theme", milestone: "M7" },
   { path: "/plugins", label: "Plugins" },
   { path: "/settings", label: "Settings" },

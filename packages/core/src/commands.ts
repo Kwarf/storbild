@@ -3,6 +3,7 @@ import { assetIdSchema, assetMetaSchema } from "./schema/asset.ts";
 import { durationMsSchema, epochMsSchema, idSchema } from "./schema/common.ts";
 import { cueActionSchema } from "./schema/cue.ts";
 import { instanceBackgroundSchema } from "./schema/instance.ts";
+import { overlaySlotSchema } from "./schema/overlay.ts";
 import { showSettingsSchema } from "./schema/settings.ts";
 import { interruptBelowSchema } from "./schema/timeline.ts";
 
@@ -77,6 +78,28 @@ export const commandSchema = z.discriminatedUnion("type", [
   command("asset.update", z.object({ id: assetIdSchema, name: z.string().min(1) })),
   /** Refused while anything uses the asset. */
   command("asset.delete", z.object({ id: assetIdSchema })),
+  // Overlay placements (ADR 0012). `index` is the position in the slot's stack; it appends
+  // when absent or past the end.
+  command(
+    "overlay.place",
+    z.object({
+      instanceId: idSchema,
+      slot: overlaySlotSchema,
+      index: z.number().int().nonnegative().optional(),
+      visible: z.boolean().optional(),
+    }),
+  ),
+  /** Moves a placement within its slot or to another one, or shows or hides it. */
+  command(
+    "overlay.update",
+    z.object({
+      instanceId: idSchema,
+      slot: overlaySlotSchema.optional(),
+      index: z.number().int().nonnegative().optional(),
+      visible: z.boolean().optional(),
+    }),
+  ),
+  command("overlay.remove", z.object({ instanceId: idSchema })),
   // Live control (ADR 0006). Without `durationMs`, a take or interrupt holds until cleared.
   command("live.take", z.object({ instanceId: idSchema, durationMs: durationMsSchema.optional() })),
   command(

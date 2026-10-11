@@ -68,8 +68,10 @@ export function rotationCount(state: ShowState, instanceId: string): number {
 export const DRAFT_ID = "draft";
 
 /**
- * The state the Library preview renders: only `instance` (with its unsaved changes) on air,
- * holding, with nothing over it. The live show's theme and settings still apply.
+ * The state the Library preview renders: only `instance` (with its unsaved changes), with
+ * nothing else on screen. A scene is on air, holding. An overlay is shown in its slot, or in
+ * `bottom-right` while it isn't placed, over the theme background. The live show's theme and
+ * settings still apply.
  */
 export function previewState(
   state: ShowState,
@@ -87,12 +89,17 @@ export function previewState(
     config: (instance.config ?? null) as JsonValue,
   };
   delete draft.error;
+  const overlay = state.plugins[instance.plugin]?.types[instance.type]?.kind === "overlay";
+  const slot = state.overlays.find((p) => p.instanceId === id)?.slot ?? "bottom-right";
   return {
     ...state,
     instances: { ...state.instances, [id]: draft },
     playlist: { items: [], anchorAt: 0 },
     cues: [],
-    live: { main: { instanceId: id, startedAt: 0 }, blackout: false },
+    overlays: overlay ? [{ instanceId: id, slot, order: 0, visible: true }] : [],
+    live: overlay
+      ? { blackout: false }
+      : { main: { instanceId: id, startedAt: 0 }, blackout: false },
   };
 }
 

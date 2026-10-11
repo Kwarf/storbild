@@ -1,6 +1,13 @@
-import { nextBoundary, resolveTimeline, type ShowState, type Timeline } from "@storbild/core";
+import {
+  nextBoundary,
+  reservedSlots,
+  resolveTimeline,
+  type ShowState,
+  type Timeline,
+} from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, type PropertyDeclarations } from "lit";
+import { OverlayLayer } from "./overlay-layer.ts";
 import { SceneLayer, TRANSITION_MS } from "./scene-layer.ts";
 
 /** The background colour until themes have more than a colour (M7). */
@@ -9,13 +16,18 @@ function backgroundOf(state: ShowState | undefined): string {
   return background?.type === "color" ? background.color : "#000";
 }
 
+/** The theme's safe area and overlay gap when it doesn't set them, px (ADR 0012). */
+export const DEFAULT_SAFE_AREA = 96;
+export const DEFAULT_GAP = 24;
+
 /** The longest the compositor waits before resolving the timeline again. */
 const MAX_WAIT_MS = 60_000;
 
 /**
  * Renders a show state on a 1920×1080 canvas (DESIGN.md §7). Layers, bottom to top: theme
- * background, main scene, overlay slots (M8), interrupt, blackout. Beneath the interrupt, a
- * dim or a cover of the theme background hides what is below, as its `below` asks (ADR 0008). The admin preview (M5) reuses it, fed from its own stream.
+ * background, main scene, overlay slots, interrupt, blackout. Beneath the interrupt, a dim or a
+ * cover of the theme background hides what is below, as its `below` asks (ADR 0008). The admin
+ * preview (M5) reuses it, fed from its own stream.
  *
  * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
  * `timeline`, and is resolved again at the next boundary. So the screen switches at
@@ -66,6 +78,86 @@ export class Compositor extends LitElement {
     .blackout.on {
       opacity: 1;
     }
+
+    /* Overlay slots (ADR 0012): bars span the top and bottom, the other eight slots sit in a
+       3×3 grid between them with an empty centre. Each slot stacks toward the centre. */
+    .overlays {
+      box-sizing: border-box;
+      padding: var(--sb-safe-area);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      grid-template-areas:
+        "top-bar top-bar top-bar"
+        "top-left top top-right"
+        "left . right"
+        "bottom-left bottom bottom-right"
+        "bottom-bar bottom-bar bottom-bar";
+      column-gap: var(--sb-gap);
+      pointer-events: none;
+    }
+    .slot {
+      display: flex;
+      flex-direction: column;
+      gap: var(--sb-gap);
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .slot.top-bar,
+    .slot.bottom-bar {
+      max-height: 240px;
+      align-items: stretch;
+    }
+    .slot.top-bar:has(> .shown) {
+      padding-bottom: var(--sb-gap);
+    }
+    .slot.bottom-bar:has(> .shown) {
+      padding-top: var(--sb-gap);
+    }
+    .slot.bottom-bar,
+    .slot.bottom-left,
+    .slot.bottom-right {
+      flex-direction: column-reverse;
+    }
+    .slot.top-left,
+    .slot.left,
+    .slot.bottom-left {
+      align-items: flex-start;
+      max-width: 640px;
+    }
+    .slot.top-right,
+    .slot.right,
+    .slot.bottom-right {
+      align-items: flex-end;
+      justify-self: end;
+      max-width: 640px;
+    }
+    .slot.left,
+    .slot.right {
+      justify-content: center;
+    }
+    .slot.top,
+    .slot.bottom {
+      flex-direction: row;
+      justify-content: center;
+      max-height: 240px;
+    }
+    .slot.top {
+      align-items: flex-start;
+    }
+    .slot.bottom {
+      align-items: flex-end;
+    }
+    .slot.bottom-left,
+    .slot.bottom,
+    .slot.bottom-right {
+      align-self: end;
+    }
+    .widget {
+      min-width: 0;
+      max-width: 100%;
+    }
   `;
 
   declare state: ShowState | undefined;
@@ -73,6 +165,7 @@ export class Compositor extends LitElement {
 
   #main: SceneLayer | undefined;
   #interrupt: SceneLayer | undefined;
+  #overlays: OverlayLayer | undefined;
   #timeline: Timeline | undefined;
   #timer: number | undefined;
 
@@ -81,6 +174,9 @@ export class Compositor extends LitElement {
     // The fades of the background, dim, cover and blackout follow the show's setting.
     const fadeMs = state?.settings?.transitionMs ?? TRANSITION_MS;
     this.style.setProperty("--sb-compositor-transition", `${fadeMs}ms`);
+    const theme = state?.themes[state.activeThemeId];
+    this.style.setProperty("--sb-safe-area", `${theme?.safeArea ?? DEFAULT_SAFE_AREA}px`);
+    this.style.setProperty("--sb-gap", `${theme?.gap ?? DEFAULT_GAP}px`);
     const now = ctx?.serverNow();
     this.#timeline = state && now !== undefined ? resolveTimeline(state, now) : undefined;
     this.#arm(this.#timeline, now);
@@ -107,12 +203,14 @@ export class Compositor extends LitElement {
     const root = this.renderRoot;
     this.#main ??= new SceneLayer(root.querySelector(".main") as HTMLElement);
     this.#interrupt ??= new SceneLayer(root.querySelector(".interrupt") as HTMLElement);
+    this.#overlays ??= new OverlayLayer(root.querySelector(".overlays") as HTMLElement);
     const { state, ctx } = this;
     const timeline = this.#timeline;
     if (!state || !ctx || !timeline) return;
     const { main, next, interrupt } = timeline;
     this.#main.update(state, ctx, main?.instanceId, next?.instanceId);
     this.#interrupt.update(state, ctx, interrupt?.instanceId);
+    this.#overlays.update(state, ctx, reservedSlots(state, timeline));
   }
 
   /** Resolves again when the timeline next changes. */
@@ -134,8 +232,9 @@ export class Compositor extends LitElement {
     this.#timer = undefined;
     this.#main?.dispose();
     this.#interrupt?.dispose();
+    this.#overlays?.dispose();
     // Reconnecting creates new layers on the next update.
-    this.#main = this.#interrupt = undefined;
+    this.#main = this.#interrupt = this.#overlays = undefined;
   }
 
   override connectedCallback() {

@@ -5,6 +5,7 @@ export { type Config, ConfigError, parseConfig } from "./config.ts";
 export * from "./duration.ts";
 export * from "./json-patch.ts";
 export * from "./live-control.ts";
+export * from "./overlays.ts";
 export * from "./plugins.ts";
 export * from "./reducer.ts";
 export * from "./schedule.ts";

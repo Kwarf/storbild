@@ -532,3 +532,83 @@ describe("assets", () => {
     expect(Object.keys(remove(unused).state.assets)).toEqual([inConfig, inBackground, inTheme]);
   });
 });
+
+describe("overlays", () => {
+  const counter = { plugin: "markdown", type: "counter", name: "C", config: { count: 1 } };
+
+  function placed(s: ReturnType<typeof setup>) {
+    return s.state.overlays.map(({ instanceId, slot, order, visible }) => [
+      instanceId,
+      slot,
+      order,
+      visible,
+    ]);
+  }
+
+  test("overlay.place stacks widgets per slot, appending or at an index", () => {
+    const s = setup();
+    const [a, b, c] = [1, 2, 3].map(
+      () => s.run({ type: "instance.create", payload: counter }) as string,
+    ) as [string, string, string];
+    s.run({ type: "overlay.place", payload: { instanceId: a, slot: "bottom-right" } });
+    s.run({ type: "overlay.place", payload: { instanceId: b, slot: "top" } });
+    s.run({
+      type: "overlay.place",
+      payload: { instanceId: c, slot: "bottom-right", index: 0, visible: false },
+    });
+    expect(placed(s)).toEqual([
+      [b, "top", 0, true],
+      [c, "bottom-right", 0, false],
+      [a, "bottom-right", 1, true],
+    ]);
+  });
+
+  test("overlay.place refuses scenes, unknown instances and a second placement", () => {
+    const s = setup();
+    const scene = s.run({ type: "instance.create", payload: markdown }) as string;
+    const widget = s.run({ type: "instance.create", payload: counter }) as string;
+    const place = (instanceId: string) =>
+      applyCommand(s.state, { type: "overlay.place", payload: { instanceId, slot: "top" } }, s.ctx);
+    expect(errorOf(() => place(scene)).code).toBe("invalid");
+    expect(errorOf(() => place("nope")).code).toBe("not_found");
+    s.run({ type: "overlay.place", payload: { instanceId: widget, slot: "left" } });
+    expect(errorOf(() => place(widget)).code).toBe("invalid");
+  });
+
+  test("overlay.update moves within and across slots and renumbers both", () => {
+    const s = setup();
+    const [a, b, c] = [1, 2, 3].map(
+      () => s.run({ type: "instance.create", payload: counter }) as string,
+    ) as [string, string, string];
+    for (const id of [a, b, c]) {
+      s.run({ type: "overlay.place", payload: { instanceId: id, slot: "right" } });
+    }
+    s.run({ type: "overlay.update", payload: { instanceId: c, index: 0 } });
+    expect(placed(s).map(([id]) => id)).toEqual([c, a, b]);
+    s.run({ type: "overlay.update", payload: { instanceId: a, slot: "left" } });
+    expect(placed(s)).toEqual([
+      [a, "left", 0, true],
+      [c, "right", 0, true],
+      [b, "right", 1, true],
+    ]);
+    // Toggling keeps the position.
+    s.run({ type: "overlay.update", payload: { instanceId: c, visible: false } });
+    expect(placed(s)[1]).toEqual([c, "right", 0, false]);
+    expect(
+      errorOf(() =>
+        applyCommand(s.state, { type: "overlay.update", payload: { instanceId: "x" } }, s.ctx),
+      ).code,
+    ).toBe("not_found");
+  });
+
+  test("overlay.remove closes the gap", () => {
+    const s = setup();
+    const [a, b] = [1, 2].map(
+      () => s.run({ type: "instance.create", payload: counter }) as string,
+    ) as [string, string];
+    s.run({ type: "overlay.place", payload: { instanceId: a, slot: "top-bar" } });
+    s.run({ type: "overlay.place", payload: { instanceId: b, slot: "top-bar" } });
+    s.run({ type: "overlay.remove", payload: { instanceId: a } });
+    expect(placed(s)).toEqual([[b, "top-bar", 0, true]]);
+  });
+});

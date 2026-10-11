@@ -74,6 +74,35 @@ describe("content helpers", () => {
     expect(rotationCount(show(), "b")).toBe(0);
   });
 
+  test("previewState shows an overlay alone, in its slot or bottom-right", () => {
+    const state: ShowState = {
+      ...show(),
+      instances: {
+        ...show().instances,
+        t: { id: "t", plugin: "np", type: "track", name: "Track", config: {}, configVersion: 1 },
+      },
+      overlays: [
+        { instanceId: "t", slot: "top-bar", order: 2, visible: false },
+        { instanceId: "x", slot: "top-bar", order: 0, visible: true },
+      ],
+    };
+    const placed = previewState(state, {
+      id: "t",
+      plugin: "np",
+      type: "track",
+      name: "T",
+      config: {},
+    });
+    expect(placed.live).toEqual({ blackout: false });
+    expect(placed.overlays).toEqual([
+      { instanceId: "t", slot: "top-bar", order: 0, visible: true },
+    ]);
+    const draft = previewState(state, { plugin: "np", type: "track", name: "New", config: {} });
+    expect(draft.overlays).toEqual([
+      { instanceId: "draft", slot: "bottom-right", order: 0, visible: true },
+    ]);
+  });
+
   test("previewState puts only the draft on air, unbroken, over a live show", () => {
     const state = { ...show(), live: { blackout: true } };
     const preview = previewState(state, {
@@ -86,6 +115,7 @@ describe("content helpers", () => {
     expect(preview.instances.g).toMatchObject({ name: "Draft", config: { content: "new" } });
     expect(preview.instances.g?.error).toBeUndefined();
     expect(preview.live).toEqual({ main: { instanceId: "g", startedAt: 0 }, blackout: false });
+    expect(preview.overlays).toEqual([]);
 
     const fresh = previewState(show(), {
       plugin: "markdown",

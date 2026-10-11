@@ -208,9 +208,9 @@ describe.skipIf(!enabled)("admin", () => {
   test(
     "pages not built yet say so; logging out returns to the form",
     async () => {
-      await admin.getByRole("link", { name: /Overlays/ }).click();
-      await admin.getByText("This page arrives in M8.").waitFor();
-      expect(new URL(admin.url()).pathname).toBe("/overlays");
+      await admin.getByRole("link", { name: /Theme/ }).click();
+      await admin.getByText("This page arrives in M7.").waitFor();
+      expect(new URL(admin.url()).pathname).toBe("/theme");
       await admin.goBack();
       await admin.getByRole("heading", { name: "Live" }).waitFor();
 

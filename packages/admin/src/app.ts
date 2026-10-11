@@ -7,6 +7,7 @@ import { fetchSchemas, type Schemas, toLogin } from "./api.ts";
 import { StateAssetSource } from "./assets.ts";
 import "./library-page.ts";
 import "./live-panel.ts";
+import "./overlays-page.ts";
 import "./plugins-page.ts";
 import "./rotation-page.ts";
 import "./schedule-page.ts";
@@ -296,6 +297,8 @@ export class Admin extends LitElement {
         return html`<sb-rotation-page .state=${state} .ctx=${ctx}></sb-rotation-page>`;
       case "/schedule":
         return html`<sb-schedule-page .state=${state} .ctx=${ctx}></sb-schedule-page>`;
+      case "/overlays":
+        return html`<sb-overlays-page .state=${state} .ctx=${ctx}></sb-overlays-page>`;
       case "/library":
         return html`<sb-library-page .state=${state} .ctx=${ctx} .schemas=${schemas}></sb-library-page>`;
       case "/plugins":

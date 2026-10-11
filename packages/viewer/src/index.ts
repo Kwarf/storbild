@@ -2,8 +2,9 @@
 // preview (M5). Importing it defines the custom elements but starts nothing.
 
 export { ClockSync, type ClockSyncOptions } from "./clock.ts";
-export { Compositor } from "./compositor.ts";
+export { Compositor, DEFAULT_GAP, DEFAULT_SAFE_AREA } from "./compositor.ts";
 export { hasStaleModules } from "./modules.ts";
+export { OverlayLayer, type OverlayLayerOptions } from "./overlay-layer.ts";
 export { SceneLayer, type SceneLayerOptions, TRANSITION_MS } from "./scene-layer.ts";
 export { STAGE_HEIGHT, STAGE_WIDTH, Stage } from "./stage.ts";
 export { type EventSourceLike, SyncClient, type SyncClientOptions, type Timers } from "./sync.ts";

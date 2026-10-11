@@ -409,7 +409,7 @@ export class LibraryPage extends LitElement {
       </label>
       ${this.#editor(state, draft, schema)}
       ${
-        info?.kind === "scene"
+        info
           ? html`<div>
               <div class="preview" aria-label="Preview">
                 <sb-stage
@@ -417,9 +417,7 @@ export class LibraryPage extends LitElement {
                 ></sb-stage>
               </div>
             </div>`
-          : info?.kind === "overlay"
-            ? html`<p class="hint">Overlays are previewed once they can be placed (M8).</p>`
-            : nothing
+          : nothing
       }
       ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
       <div class="bar">

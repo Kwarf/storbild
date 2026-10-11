@@ -87,6 +87,18 @@
         "lit": "^3.3.3",
       },
     },
+    "plugins/info": {
+      "name": "@storbild/plugin-info",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "3.3.3",
+      },
+      "peerDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "^3.3.3",
+      },
+    },
     "plugins/markdown": {
       "name": "@storbild/plugin-markdown",
       "version": "0.2.0",
@@ -144,6 +156,8 @@
     "@storbild/core": ["@storbild/core@workspace:packages/core"],
 
     "@storbild/plugin-announcement": ["@storbild/plugin-announcement@workspace:plugins/announcement"],
+
+    "@storbild/plugin-info": ["@storbild/plugin-info@workspace:plugins/info"],
 
     "@storbild/plugin-markdown": ["@storbild/plugin-markdown@workspace:plugins/markdown"],
 

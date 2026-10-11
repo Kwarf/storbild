@@ -41,6 +41,8 @@ export const themeSchema = z.object({
   }),
   /** px on the 1920×1080 canvas. */
   safeArea: z.number().nonnegative().optional(),
+  /** The space between overlay widgets in a slot, px on the canvas (ADR 0012). */
+  gap: z.number().nonnegative().optional(),
   /** Escape hatch, viewer-scoped, at your own risk. */
   customCss: z.string().optional(),
 });

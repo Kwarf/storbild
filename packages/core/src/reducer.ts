@@ -5,6 +5,7 @@ import { type Issue, type Normalized, normalizeConfig, normalizeSettings } from 
 import type { AssetMeta } from "./schema/asset.ts";
 import type { Cue, CueAction } from "./schema/cue.ts";
 import type { Instance } from "./schema/instance.ts";
+import { type OverlayPlacement, overlaySlotSchema } from "./schema/overlay.ts";
 import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
 import type { ShowState } from "./schema/state.ts";
@@ -242,6 +243,37 @@ function reduce(
       };
     }
 
+    case "overlay.place": {
+      const { instanceId, slot, index, visible } = command.payload;
+      getInstance(state, instanceId);
+      if (typeInfo(state, instanceId)?.kind !== "overlay") {
+        throw new CommandError("invalid", `instance ${instanceId} is not an overlay`);
+      }
+      if (state.overlays.some((placement) => placement.instanceId === instanceId)) {
+        throw new CommandError("invalid", `instance ${instanceId} is already placed`);
+      }
+      const placement = { instanceId, slot, order: 0, visible: visible ?? true };
+      return { state: withPlacement(state, placement, index) };
+    }
+
+    case "overlay.update": {
+      const { instanceId, slot, index, visible } = command.payload;
+      const placement = getPlacement(state, instanceId);
+      const moved = {
+        ...placement,
+        slot: slot ?? placement.slot,
+        visible: visible ?? placement.visible,
+      };
+      // Staying in its slot without an index keeps its position.
+      const at = index ?? (moved.slot === placement.slot ? placement.order : undefined);
+      return { state: withPlacement(state, moved, at) };
+    }
+
+    case "overlay.remove": {
+      const placement = getPlacement(state, command.payload.instanceId);
+      return { state: withPlacement(state, placement, undefined, true) };
+    }
+
     case "live.take":
       checkScene(state, command.payload.instanceId);
       return { state: take(state, command.payload, ctx.now) };
@@ -328,6 +360,40 @@ function checkScene(state: ShowState, id: string) {
   if (!isPlayableScene(state, id)) {
     throw new CommandError("invalid", `instance ${id} is broken or not a scene`);
   }
+}
+
+/** The type of an instance's plugin, when the plugin is loaded. */
+function typeInfo(state: ShowState, id: string) {
+  const instance = state.instances[id];
+  return instance && state.plugins[instance.plugin]?.types[instance.type];
+}
+
+function getPlacement(state: ShowState, instanceId: string): OverlayPlacement {
+  const placement = state.overlays.find((p) => p.instanceId === instanceId);
+  if (!placement) throw new CommandError("not_found", `overlay ${instanceId} is not placed`);
+  return placement;
+}
+
+/**
+ * Puts `placement` at `index` in its slot's stack (appending when absent or past the end), or
+ * takes it out with `remove`, and renumbers every slot so `order` runs 0..n-1. The list is
+ * kept in slot order, so an edit to one slot never moves another slot's entries.
+ */
+function withPlacement(
+  state: ShowState,
+  placement: OverlayPlacement,
+  index: number | undefined,
+  remove = false,
+): ShowState {
+  const others = state.overlays
+    .filter((p) => p.instanceId !== placement.instanceId)
+    .toSorted((a, b) => a.order - b.order);
+  const overlays = overlaySlotSchema.options.flatMap((slot) => {
+    const stack = others.filter((p) => p.slot === slot);
+    if (!remove && placement.slot === slot) stack.splice(index ?? stack.length, 0, placement);
+    return stack.map((p, order) => (p.order === order ? p : { ...p, order }));
+  });
+  return { ...state, overlays };
 }
 
 function getCueIndex(state: ShowState, id: string): number {

@@ -235,7 +235,9 @@ interface OverlayPlacement {
 - Widgets size themselves. A slot may cap the maximum width or height.
 - Slots sit inside the theme's safe area.
 - Scene types can declare `reserveSlots: OverlaySlot[]` (those widgets fade out while the scene is live) or `hideOverlays: true` (all widgets fade out).
-- A widget whose data is stale (for example now-playing with no update for N minutes) hides itself, and the rest of the stack closes the gap.
+- A widget whose data is stale (for example now-playing with no update for N minutes) hides itself, and the rest of the stack closes the gap. It says when through the SDK's `staleAt()` hook.
+
+The `overlay.*` commands, the slot grid and its size caps, which scenes' reservations count, and how widgets fade and leave their stack are specified in [ADR 0012](docs/decisions/0012-overlays.md).
 
 ### 4.6 Themes
 
@@ -250,7 +252,8 @@ interface Theme {
     | { type: "scene"; instanceId: string };       // plugin-rendered, e.g. WebGL
   fonts: { heading: FontRef; body: FontRef; mono?: FontRef };
   colors: { text: string; muted: string; accent: string; surface: string };
-  safeArea?: number;           // px on the 1920×1080 canvas
+  safeArea?: number;           // px on the 1920×1080 canvas, default 96
+  gap?: number;                // px between overlay widgets, default 24 (ADR 0012)
   customCss?: string;          // escape hatch, viewer-scoped, at your own risk
 }
 
@@ -354,7 +357,7 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
-M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted.
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted. `overlay.place` takes an instance of an overlay type and a slot, each instance is placed at most once, and `overlay.update` moves a placement within or across slots ([ADR 0012](docs/decisions/0012-overlays.md)).
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -399,6 +402,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 - **Viewer:** Lit elements extending `StorbildScene<Config, Settings>` or `StorbildOverlay<...>`.
   - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
   - Lifecycle: `prepare()` (preload; awaited before the scene is used), `enter(at)`, `exit(at)`, `dispose()`.
+  - Overlays may override `staleAt()`, the server time at which their data goes stale; the compositor then fades them out and closes the gap ([ADR 0012](docs/decisions/0012-overlays.md)).
   - Scenes don't implement transitions. The compositor owns them.
 - **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components, `<sb-form>` and `<sb-field>`. The `fields` helpers (`markdown`, `color`, `duration`, `datetime`, `asset`) tag a schema with the widget it needs. A plugin may provide a custom editor element in its admin module, built from the same components (text, markdown, number, colour, duration, datetime, select, list and the asset picker), so it looks native ([ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)).
 - **Server (optional):** `server(ctx)` runs when the plugin is loaded. Its context offers:
@@ -428,7 +432,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 | `slideshow` | scene `images` | Multiple images; duration = count × per-image time; `background: "own"`. Built in M6b |
 | `countdown` | scene `countdown`, overlay `countdown` | Target time; renders `target − serverNow()` |
 | `announcement` | scene `announcement` | Big-text message on an opaque panel; intended for interrupts and takes. Built in M6b |
-| `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code; clock |
+| `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code; clock. The clock is built in M8 |
 | `now-playing` | overlay `now-playing` (singleton) | Server part consumes an upstream **SSE stream** (URL in settings) and writes the track to plugin state; stale-hide. Low priority for details |
 
 ---
@@ -652,7 +656,11 @@ The asset store, the asset picker, the `cue.*` rules, both plugins, quick announ
 - Fade out widgets for `reserveSlots` and `hideOverlays`, and stale-hide support in the SDK base class.
 - Admin overlays page: a slot diagram, plus placing, reordering and toggling widgets.
 
+- The `info` plugin's `clock` overlay (from M9), so overlays can be used in a real show.
+
 **Done when:** two widgets stacked in `bottom-right` render correctly. A scene reserving `bottom-right` hides them during its run, and they return afterwards.
+
+The commands, the slot grid, reservations, fading, the `staleAt()` hook, the clock and the pages are specified in [ADR 0012](docs/decisions/0012-overlays.md).
 
 ### M9 — Built-in plugins
 
@@ -660,7 +668,7 @@ The asset store, the asset picker, the `cue.*` rules, both plugins, quick announ
 
 Implement the plugins in §6.4 using only the public SDK, each with tests:
 
-- `markdown` (polish the M2 fixture), `countdown` (scene and overlay), `info` (Wi-Fi with QR, clock). `announcement` and `slideshow` are built in M6b.
+- `markdown` (polish the M2 fixture), `countdown` (scene and overlay), `info` (Wi-Fi with QR). `announcement` and `slideshow` are built in M6b, and `info`'s clock in M8.
 - `now-playing`: the server part consumes an upstream SSE stream from a URL in settings, maps events to `{ artist, title }` in plugin state, reconnects with backoff, and stale-hides. Mapping details stay flexible.
 
 **Done when:** each plugin works in a real show, adapts to theme changes, and appears correctly in the admin with generated or custom forms.

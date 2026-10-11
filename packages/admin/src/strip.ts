@@ -1,4 +1,4 @@
-import type { ShowState } from "@storbild/core";
+import { reservedSlots, type ShowState } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
@@ -156,7 +156,11 @@ export class Strip extends LitElement {
   #rows(state: ShowState, now: number) {
     const status = onAir(state, now);
     const { main, next, interrupt } = status.timeline;
-    const overlays = state.overlays.filter((overlay) => overlay.visible);
+    // Widgets in slots the scene on air or the interrupt reserves are faded out (ADR 0012).
+    const reserved = reservedSlots(state, status.timeline);
+    const overlays = state.overlays.filter(
+      (overlay) => overlay.visible && !reserved.has(overlay.slot),
+    );
     return html`<div class="rows">
       <div class="mode ${status.mode}" data-mode=${status.mode}>
         <span class="title">${status.title}</span>

@@ -1,6 +1,6 @@
 import type { PluginConfig } from "@storbild/plugin-sdk";
-import { StorbildScene } from "@storbild/plugin-sdk/viewer";
-import { html } from "lit";
+import { StorbildOverlay, StorbildScene } from "@storbild/plugin-sdk/viewer";
+import { css, html } from "lit";
 import type plugin from "./plugin.ts";
 
 type Config = PluginConfig<typeof plugin, "scene">;
@@ -42,3 +42,33 @@ class ProbeCard extends StorbildScene<PluginConfig<typeof plugin, "card">> {
 }
 
 customElements.define("probe-card", ProbeCard);
+
+class ProbeWidget extends StorbildOverlay<PluginConfig<typeof plugin, "widget">> {
+  static override styles = css`
+    :host {
+      display: block;
+      background: #08f;
+    }
+  `;
+
+  override staleAt() {
+    return this.config.staleAt;
+  }
+
+  override render() {
+    const { width, height, label } = this.config;
+    return html`<p class="probe-widget" style="margin: 0; width: ${width}px; height: ${height}px">
+      ${label}
+    </p>`;
+  }
+}
+
+customElements.define("probe-widget", ProbeWidget);
+
+class ProbeCorner extends StorbildScene<PluginConfig<typeof plugin, "corner">> {
+  override render() {
+    return html`<p class="probe-corner">${this.config.label}</p>`;
+  }
+}
+
+customElements.define("probe-corner", ProbeCorner);

@@ -313,6 +313,49 @@ describe("external plugin (M2 acceptance)", () => {
     expect(item()?.resolvedDurationMs).toBe(15_000);
   });
 
+  test("built-in info clock is an overlay that can be placed, with the patch on /events", async () => {
+    expect(plugin("info")).toMatchObject({
+      status: "ok",
+      types: { clock: { kind: "overlay", viewer: "sb-info-clock" } },
+    });
+    const client = await SseClient.connect(new URL("/events", storbild.viewer.url));
+    clients.push(client);
+    await client.nextEvent();
+    const clock = await command("instance.create", {
+      plugin: "info",
+      type: "clock",
+      name: "Clock",
+      config: {},
+    });
+    expect(storbild.hub.state.instances[clock.body.id as string]?.config).toEqual({
+      seconds: false,
+    });
+    await client.nextEvent();
+    const placed = await command("overlay.place", {
+      instanceId: clock.body.id,
+      slot: "bottom-right",
+    });
+    expect(placed.status).toBe(200);
+    const patch = JSON.parse((await client.nextEvent()).data) as JsonPatchOp[];
+    expect(patch.find((op) => op.path.startsWith("/overlays"))).toMatchObject({
+      value: [{ instanceId: clock.body.id, slot: "bottom-right", order: 0, visible: true }],
+    });
+    // Only overlays can be placed.
+    const scene = await command("instance.create", {
+      plugin: "announcement",
+      type: "announcement",
+      name: "Not a widget",
+      config: { message: "x" },
+    });
+    await client.nextEvent();
+    expect(
+      (await command("overlay.place", { instanceId: scene.body.id, slot: "top" })).status,
+    ).toBe(422);
+    await command("overlay.remove", { instanceId: clock.body.id });
+    await command("instance.delete", { id: scene.body.id });
+    await command("instance.delete", { id: clock.body.id });
+  });
+
   test("server part writes plugin state that arrives as a patch on /events", async () => {
     const client = await SseClient.connect(new URL("/events", storbild.viewer.url));
     clients.push(client);
