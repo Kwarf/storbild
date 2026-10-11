@@ -4,6 +4,7 @@ import { describeForm, initialValue, type ValueChangeEvent } from "@storbild/plu
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { html as staticHtml, unsafeStatic } from "lit/static-html.js";
 import { CommandFailed, errorText, type Schemas, send } from "./api.ts";
 import "./asset-panel.ts";
@@ -312,9 +313,12 @@ export class LibraryPage extends LitElement {
     return html`<section class="group" data-group=${group.key}>
       <h3>${group.label}</h3>
       <ul>
-        ${group.instances.map((instance) => {
-          const uses = rotationCount(state, instance.id);
-          return html`<li>
+        ${repeat(
+          group.instances,
+          (instance) => instance.id,
+          (instance) => {
+            const uses = rotationCount(state, instance.id);
+            return html`<li>
             <button
               aria-current=${this.selected === instance.id ? "true" : "false"}
               data-instance=${instance.id}
@@ -330,7 +334,8 @@ export class LibraryPage extends LitElement {
               }
             </button>
           </li>`;
-        })}
+          },
+        )}
       </ul>
     </section>`;
   }
@@ -353,7 +358,9 @@ export class LibraryPage extends LitElement {
         assets.length === 0
           ? html`<p class="empty">No files yet. Upload images to use them in scenes.</p>`
           : html`<ul>
-              ${assets.map(
+              ${repeat(
+                assets,
+                (asset) => asset.id,
                 (asset) => html`<li>
                   <button
                     aria-current=${this.selected === ASSET + asset.id ? "true" : "false"}

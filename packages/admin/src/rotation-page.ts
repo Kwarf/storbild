@@ -7,6 +7,7 @@ import {
 } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { errorText, send } from "./api.ts";
 import { fromLocalInput, move, toLocalInput } from "./content.ts";
 import { formatClock, formatDuration, parseDuration } from "./format.ts";
@@ -163,7 +164,8 @@ export class RotationPage extends LitElement {
   declare errors: Record<string, string>;
   /** Items whose time window editor is open. */
   declare windows: ReadonlySet<string>;
-  declare dragging: number | undefined;
+  /** The ID of the item being dragged. */
+  declare dragging: string | undefined;
   /** Where a dragged row would land: before the row at this index. */
   declare dropAt: number | undefined;
   declare addId: string;
@@ -216,11 +218,14 @@ export class RotationPage extends LitElement {
                 }
               }}
             >
-              ${items.map((item, i) =>
-                this.#row(state, item, i, {
-                  onAir: timeline.main?.itemId === item.id,
-                  next: timeline.next?.itemId === item.id,
-                }),
+              ${repeat(
+                items,
+                (item) => item.id,
+                (item, i) =>
+                  this.#row(state, item, i, {
+                    onAir: timeline.main?.itemId === item.id,
+                    next: timeline.next?.itemId === item.id,
+                  }),
               )}
             </ol>`
       }
@@ -250,20 +255,21 @@ export class RotationPage extends LitElement {
 
   #row(state: ShowState, item: PlaylistItem, i: number, at: { onAir: boolean; next: boolean }) {
     const count = state.playlist.items.length;
+    const from = this.#draggingIndex();
     const playable = isPlayableScene(state, item.instanceId);
     const open = this.windows.has(item.id);
     const hasWindow = item.activeFrom !== undefined || item.activeUntil !== undefined;
     const drop =
-      this.dragging === undefined || this.dropAt === undefined
+      from === undefined || this.dropAt === undefined
         ? ""
-        : this.dropAt === i && this.dragging !== i && this.dragging !== i - 1
+        : this.dropAt === i && from !== i && from !== i - 1
           ? "drop-before"
-          : this.dropAt === count && i === count - 1 && this.dragging !== i
+          : this.dropAt === count && i === count - 1 && from !== i
             ? "drop-after"
             : "";
     const label = typeLabel(state, item.instanceId);
     return html`<li
-      class="${item.enabled ? "" : "off"} ${this.dragging === i ? "dragging" : ""} ${drop}"
+      class="${item.enabled ? "" : "off"} ${this.dragging === item.id ? "dragging" : ""} ${drop}"
       data-item=${item.id}
       data-index=${i}
     >
@@ -274,7 +280,7 @@ export class RotationPage extends LitElement {
           title="Drag to reorder"
           draggable="true"
           @dragstart=${(e: DragEvent) => {
-            this.dragging = i;
+            this.dragging = item.id;
             const row = (e.target as HTMLElement).closest("li");
             if (e.dataTransfer) {
               e.dataTransfer.setData("text/plain", item.id);
@@ -400,6 +406,12 @@ export class RotationPage extends LitElement {
     });
   }
 
+  /** The dragged item's current index, which a patch may have moved mid-drag. */
+  #draggingIndex() {
+    const index = this.state?.playlist.items.findIndex((item) => item.id === this.dragging) ?? -1;
+    return index === -1 ? undefined : index;
+  }
+
   #dragOver = (e: DragEvent) => {
     if (this.dragging === undefined) return;
     e.preventDefault();
@@ -413,7 +425,7 @@ export class RotationPage extends LitElement {
 
   #drop = (e: DragEvent) => {
     e.preventDefault();
-    const from = this.dragging;
+    const from = this.#draggingIndex();
     const at = this.dropAt;
     this.dragging = undefined;
     this.dropAt = undefined;

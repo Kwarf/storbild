@@ -1,6 +1,7 @@
 import { type Command, type Cue, isPlayableScene, type ShowState } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { errorText, send } from "./api.ts";
 import {
   actionText,
@@ -209,11 +210,17 @@ export class SchedulePage extends LitElement {
       ${
         state.cues.length === 0
           ? html`<p class="empty">Nothing is scheduled.</p>`
-          : cueDays(state.cues, now).map(
+          : repeat(
+              cueDays(state.cues, now),
+              (day) => day.key,
               (day) => html`<section class="day" data-day=${day.key}>
                 <h2>${day.label}</h2>
                 <ol>
-                  ${day.cues.map((cue) => this.#row(state, cue, now, cue.id === next?.id))}
+                  ${repeat(
+                    day.cues,
+                    (cue) => cue.id,
+                    (cue) => this.#row(state, cue, now, cue.id === next?.id),
+                  )}
                 </ol>
               </section>`,
             )
