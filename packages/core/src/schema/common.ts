@@ -6,7 +6,7 @@ export const idSchema = z.string().min(1);
 /** Absolute time in epoch milliseconds, server time. */
 export const epochMsSchema = z.number().int();
 
-/** A non-negative duration in milliseconds. */
+/** A positive duration in milliseconds. */
 export const durationMsSchema = z.number().int().positive();
 
 /** Any JSON value. */

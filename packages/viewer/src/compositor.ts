@@ -1,4 +1,4 @@
-import type { ShowState } from "@storbild/core";
+import { nextBoundary, resolveTimeline, type ShowState, type Timeline } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, type PropertyDeclarations } from "lit";
 import { SceneLayer, TRANSITION_MS } from "./scene-layer.ts";
@@ -9,10 +9,18 @@ function backgroundOf(state: ShowState | undefined): string {
   return background?.type === "color" ? background.color : "#000";
 }
 
+/** The longest the compositor waits before resolving the timeline again. */
+const MAX_WAIT_MS = 60_000;
+
 /**
  * Renders a show state on a 1920×1080 canvas (DESIGN.md §7). Layers, bottom to top: theme
  * background, main scene, overlay slots (M8), interrupt (optionally dimming what is below),
  * blackout. The admin preview (M5) reuses it, fed from its own stream.
+ *
+ * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
+ * `timeline`, and is resolved again at the next boundary. So the screen switches at
+ * `next.startsAt` even when the patch is late, and keeps the rotation going without one
+ * (ADR 0006).
  */
 export class Compositor extends LitElement {
   static override properties: PropertyDeclarations = {
@@ -61,9 +69,18 @@ export class Compositor extends LitElement {
 
   #main: SceneLayer | undefined;
   #interrupt: SceneLayer | undefined;
+  #timeline: Timeline | undefined;
+  #timer: number | undefined;
+
+  protected override willUpdate() {
+    const { state, ctx } = this;
+    const now = ctx?.serverNow();
+    this.#timeline = state && now !== undefined ? resolveTimeline(state, now) : undefined;
+    this.#arm(this.#timeline, now);
+  }
 
   override render() {
-    const timeline = this.state?.timeline;
+    const timeline = this.#timeline;
     return html`
       <div class="layer background" style="background-color: ${backgroundOf(this.state)}"></div>
       <div class="layer main" part="main"></div>
@@ -79,14 +96,30 @@ export class Compositor extends LitElement {
     this.#main ??= new SceneLayer(root.querySelector(".main") as HTMLElement);
     this.#interrupt ??= new SceneLayer(root.querySelector(".interrupt") as HTMLElement);
     const { state, ctx } = this;
-    if (!state || !ctx) return;
-    const { main, next, interrupt } = state.timeline;
+    const timeline = this.#timeline;
+    if (!state || !ctx || !timeline) return;
+    const { main, next, interrupt } = timeline;
     this.#main.update(state, ctx, main?.instanceId, next?.instanceId);
     this.#interrupt.update(state, ctx, interrupt?.instanceId);
   }
 
+  /** Resolves again when the timeline next changes. */
+  #arm(timeline: Timeline | undefined, now: number | undefined) {
+    window.clearTimeout(this.#timer);
+    this.#timer = undefined;
+    if (!timeline || now === undefined || !this.isConnected) return;
+    const at = nextBoundary(timeline) ?? now + MAX_WAIT_MS;
+    // A timer that fires early, e.g. while the clock slews, just resolves the same and re-arms.
+    this.#timer = window.setTimeout(
+      () => this.requestUpdate(),
+      Math.min(Math.max(at - now, 0), MAX_WAIT_MS),
+    );
+  }
+
   override disconnectedCallback() {
     super.disconnectedCallback();
+    window.clearTimeout(this.#timer);
+    this.#timer = undefined;
     this.#main?.dispose();
     this.#interrupt?.dispose();
     // Reconnecting creates new layers on the next update.

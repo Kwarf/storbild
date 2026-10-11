@@ -5,10 +5,10 @@ import {
   diff,
   type HostCommand,
   hostCommandSchema,
-  interimTimeline,
   type JsonPatchOp,
   type PluginCatalog,
   type ShowState,
+  settle,
   unescapePointerToken,
 } from "@storbild/core";
 import { saveState } from "./store.ts";
@@ -99,7 +99,7 @@ export class StateHub {
       throw new RevisionConflictError(before.revision);
     }
     const outcome = applyCommand(before, command, this.#context());
-    this.#commit(this.#settle(outcome.state));
+    this.#commit(this.#settle(before, outcome.state));
     return {
       revision: outcome.state.revision,
       ...(outcome.id !== undefined && { id: outcome.id }),
@@ -117,7 +117,7 @@ export class StateHub {
       hostCommandSchema.parse(command),
       this.#context(),
     );
-    const state = this.#settle(applied);
+    const state = this.#settle(before, applied);
     if (diff(before, { ...state, revision: before.revision }).length > 0) this.#commit(state);
     return this.#state.revision;
   }
@@ -125,9 +125,17 @@ export class StateHub {
   /** Replaces the state with `fn(state)` as one new revision, unless nothing changes. */
   update(fn: (state: ShowState) => ShowState): number {
     const before = this.#state;
-    const next = this.#settle({ ...fn(before), revision: before.revision });
+    const next = this.#settle(before, { ...fn(before), revision: before.revision });
     if (diff(before, next).length > 0) this.#commit({ ...next, revision: before.revision + 1 });
     return this.#state.revision;
+  }
+
+  /**
+   * Brings the timeline up to the current time: a scene ends, cues fire. The scheduler calls
+   * this at every timeline boundary. A new revision is made only if something changed.
+   */
+  tick(): number {
+    return this.update((state) => state);
   }
 
   /**
@@ -143,10 +151,9 @@ export class StateHub {
     return { now: this.#now(), newId: this.#newId, catalog: this.#catalog };
   }
 
-  /** Recomputes the timeline from the new state. M4 replaces this with the scheduler. */
-  #settle(state: ShowState): ShowState {
-    const timeline = interimTimeline(state, this.#now());
-    return timeline === state.timeline ? state : { ...state, timeline };
+  /** Runs the scheduler's step on a new state: durations, anchor, cues and the timeline. */
+  #settle(before: ShowState, after: ShowState): ShowState {
+    return settle(before, after, { now: this.#now(), catalog: this.#catalog });
   }
 
   #commit(next: ShowState) {

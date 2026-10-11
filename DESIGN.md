@@ -156,8 +156,9 @@ interface PlaylistItem {
 }
 ```
 
-- The rotation loops through items that are enabled, currently inside their time window and not broken.
-- **Duration is always determined on the server.** It is the item override, or the instance type's `duration(config, settings)`, or a global default. The resolved value is stored in state as `resolvedDurationMs`, so the viewer never needs plugin server code. Scenes cannot end themselves from the client.
+- The rotation loops through items that are enabled, not broken, and inside their time window at the moment they would start. A started item plays to its end.
+- **Duration is always determined on the server.** It is the item override, or the instance type's `duration(config, settings)`, or a global default (15 s). The resolved value is stored in state as `resolvedDurationMs`, so the viewer never needs plugin server code. Scenes cannot end themselves from the client.
+- Editing the playlist never restarts the show: the item on air keeps playing if it is still eligible, otherwise the rotation continues with the item after it ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
 ### 4.3 Schedule cues
 
@@ -175,7 +176,7 @@ interface Cue {
 }
 ```
 
-Recurring cues are out of scope for the first version.
+A due cue is applied as of its own `at` and marked `fired`; one whose take or interrupt would already have ended has no effect. Recurring cues are out of scope for the first version.
 
 ### 4.4 Live control and timeline
 
@@ -191,12 +192,25 @@ interface Timeline {
 }
 ```
 
+Live control is the input that `resolveTimeline` combines with the rotation:
+
+```ts
+interface Live {
+  main?: { instanceId: string; itemId?: string; startedAt: number; endsAt?: number };  // a take, or the scene frozen under an interrupt
+  interrupt?: { instanceId: string; startedAt: number; endsAt?: number; dimBelow: boolean };
+  blackout: boolean;
+}
+```
+
 Semantics:
 
-- **Take now** replaces `main` for its duration (or until cleared), then the rotation continues with the next item.
-- **Interrupt** shows on the interrupt layer above everything except blackout. It ends after its duration or when dismissed. While it is active the rotation is paused. When it ends, the rotation continues with the next item, not by restarting the interrupted one. (This is a deliberate simplification; record it in an ADR if it changes.)
+- **Take now** replaces `main` for its duration, or until resumed when it has none. Then the rotation continues with the item after the one it replaced.
+- **Interrupt** shows on the interrupt layer above everything except blackout. It ends after its duration, or when dismissed if it has none. While it is active the rotation is paused: the scene on air stays frozen beneath. When it ends, the rotation continues with the next item, not by restarting the interrupted one. (This is a deliberate simplification; record it in an ADR if it changes.)
 - **Blackout** always wins. It renders pure black, and the timeline keeps advancing underneath.
-- **The rotation is deterministic.** It is anchored at `rotation.anchorAt`, and the position at time *t* is computed from the anchor and the resolved durations of the active items. The anchor is only reset when the rotation's content changes or after a take or interrupt. This makes `resolveTimeline(state, t)` a **pure function** in `packages/core`, used by both the server (authoritative) and the viewer (to keep going during outages, see M10).
+- **The rotation is deterministic.** It is anchored at `playlist.anchorAt` and `playlist.anchorItemId`, and the position at time *t* is computed from the anchor and the resolved durations of the eligible items. The anchor is only moved when the rotation's content changes or by a take or interrupt. This makes `resolveTimeline(state, t)` a **pure function** in `packages/core`, used by both the server (authoritative) and the viewer (to switch on time and keep going during outages).
+- `next` is announced as soon as the current scene starts, whenever the following scene is known.
+
+The scheduler's rules (anchoring, edits, cues, the server timer) are specified in [ADR 0006](docs/decisions/0006-scheduler-and-timeline.md).
 
 ### 4.5 Overlays
 
@@ -268,12 +282,13 @@ interface ShowState {
   revision: number;
   plugins: Record<string, PluginEntry>;
   instances: Record<string, Instance>;
-  playlist: { items: PlaylistItem[]; anchorAt: number };
+  playlist: { items: PlaylistItem[]; anchorAt: number; anchorItemId?: string };
   cues: Cue[];
   overlays: OverlayPlacement[];
   themes: Record<string, Theme>;
   activeThemeId: string;
-  timeline: Timeline;
+  live: Live;                  // input: takes, interrupts, blackout
+  timeline: Timeline;          // output: the server's resolution at the latest revision
   assets: Record<string, AssetMeta>;
 }
 ```
@@ -329,6 +344,8 @@ overlay.place | overlay.update | overlay.remove
 theme.create | theme.update | theme.delete | theme.activate
 live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 ```
+
+`live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
 M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
 
@@ -424,8 +441,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
   - A watchdog reloads the page if there's no message or heartbeat for 60 s, but only if the server answers `/time`. Otherwise it reopens the stream and keeps waiting, so a kiosk is never left on an error page.
   - A failing scene never stops the show. If `prepare()` fails, the scene is shown anyway; if its module can't load, only the layers below show.
-  - On `visibilitychange` the viewer re-resolves the timeline from `serverNow()`.
-  - Outages: the viewer keeps rendering via `resolveTimeline(state, serverNow())` from `packages/core` (see M10).
+  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. On `visibilitychange` it re-resolves at once. M10 adds offline caching.
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
 - **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.
@@ -561,6 +577,8 @@ Until M4, an interim rule puts the first enabled playlist item on air. The heart
 
 **Done when:** extensive unit tests of `resolveTimeline` cover loops, windows opening and closing mid-rotation, take and interrupt then resume, blackout, and an empty or all-disabled playlist (fall back to theme background only). A manual test shows the rotation running unattended across two viewers.
 
+Live control as a separate `live` input, the anchor item, rotation and edit rules, durations, cues, the server timer and the viewer's own resolution are specified in [ADR 0006](docs/decisions/0006-scheduler-and-timeline.md).
+
 ### M5 — Admin foundation
 
 **Depends on:** M1. Can run in parallel with M3/M4.
@@ -647,6 +665,6 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- Default rotation duration (suggested: 15 s). The transition length is 800 ms until M6 makes it a setting ([ADR 0005](docs/decisions/0005-viewer.md)).
+- The default rotation duration is 15 s ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)) and the transition length 800 ms ([ADR 0005](docs/decisions/0005-viewer.md)), until M6 makes them settings.
 - Whether quick-announce messages should be auto-deleted after use, or kept in the library.
 - The exact upstream event format for `now-playing` (to be defined when the music service is known).

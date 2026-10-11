@@ -58,6 +58,20 @@ export const commandSchema = z.discriminatedUnion("type", [
   command("playlist.reorder", z.object({ itemIds: z.array(idSchema) })),
   /** Replaces the plugin's settings whole; they are validated by its settings schema. */
   command("plugin.updateSettings", z.object({ plugin: z.string().min(1), settings: z.json() })),
+  // Live control (ADR 0006). Without `durationMs`, a take or interrupt holds until cleared.
+  command("live.take", z.object({ instanceId: idSchema, durationMs: durationMsSchema.optional() })),
+  command(
+    "live.interrupt",
+    z.object({
+      instanceId: idSchema,
+      durationMs: durationMsSchema.optional(),
+      dimBelow: z.boolean().optional(),
+    }),
+  ),
+  command("live.clearInterrupt", z.object({})),
+  /** Ends any take and interrupt; the rotation continues with the next item. */
+  command("live.resume", z.object({})),
+  command("live.blackout", z.object({ on: z.boolean() })),
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export type CommandType = Command["type"];

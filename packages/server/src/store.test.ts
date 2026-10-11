@@ -44,6 +44,7 @@ function fullState(): ShowState {
     },
     playlist: {
       anchorAt: 500,
+      anchorItemId: "p1",
       items: [
         { id: "p2", instanceId: "i1", enabled: false, durationMs: 1000 },
         { id: "p1", instanceId: "i1", enabled: true, activeFrom: 1, activeUntil: 2 },
@@ -67,6 +68,11 @@ function fullState(): ShowState {
       },
     },
     activeThemeId: "theme2",
+    live: {
+      main: { instanceId: "i1", itemId: "p1", startedAt: 10, endsAt: 20 },
+      interrupt: { instanceId: "i1", startedAt: 12, dimBelow: true },
+      blackout: true,
+    },
     timeline: {
       mode: "auto",
       main: { instanceId: "i1", itemId: "p1", startedAt: 10 },
@@ -116,6 +122,17 @@ describe("persistence", () => {
     expect(Object.keys(loaded?.instances ?? {})).toEqual(["i2"]);
     expect(logged).toHaveLength(1);
     expect(logged[0]).toContain("instance i1");
+  });
+
+  test("a database without live control or an anchor item loads the defaults quietly", () => {
+    const db = openDatabase(":memory:");
+    saveState(db, fullState());
+    db.run(`DELETE FROM meta WHERE key IN ('live', 'playlist.anchorItemId')`);
+    const logged: string[] = [];
+    const loaded = loadState(db, (message) => logged.push(message));
+    expect(loaded?.live).toEqual({ blackout: false });
+    expect(loaded?.playlist.anchorItemId).toBeUndefined();
+    expect(logged).toEqual([]);
   });
 
   test("tables reject invalid JSON", () => {

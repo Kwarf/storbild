@@ -55,10 +55,19 @@ describe.skipIf(!enabled)("viewer", () => {
       config: { label, ...extra },
     })) as string;
 
-  /** Replaces the playlist with one item per instance, in order. */
-  async function setPlaylist(...instanceIds: string[]) {
+  /**
+   * Replaces the playlist with one item per instance, in order. Items last 10 minutes, so
+   * nothing rotates during a test, unless a duration is given.
+   */
+  async function setPlaylist(...items: (string | { instanceId: string; durationMs: number })[]) {
     const existing = storbild.hub.state.playlist.items.map((item) => item.id);
-    for (const instanceId of instanceIds) await command("playlist.addItem", { instanceId });
+    for (const item of items) {
+      await command(
+        "playlist.addItem",
+        typeof item === "string" ? { instanceId: item, durationMs: 600_000 } : item,
+      );
+    }
+    // Removing the item on air puts the first new one on air now.
     for (const id of existing) await command("playlist.removeItem", { id });
   }
 
@@ -146,12 +155,10 @@ describe.skipIf(!enabled)("viewer", () => {
     async () => {
       a = await probe("A");
       b = await probe("B");
-      await setPlaylist(a, b);
+      await setPlaylist(a);
       await forAll((page) => scene(page, "main").locator(".probe", { hasText: "A" }).waitFor());
 
-      await command("playlist.reorder", {
-        itemIds: [...storbild.hub.state.playlist.items].reverse().map((item) => item.id),
-      });
+      await setPlaylist(b);
       await forAll(async (page) => {
         await scene(page, "main", "out").waitFor();
         expect(await page.locator("sb-compositor .main > .scene").count()).toBeLessThanOrEqual(2);
@@ -202,13 +209,13 @@ describe.skipIf(!enabled)("viewer", () => {
   );
 
   test(
-    "prefetches and prepares the next scene before it goes on air",
+    "prefetches and prepares the next scene before it goes on air at its start",
     async () => {
       const c = await probe("C", { prepareMs: 300 });
-      storbild.hub.update((state) => ({
-        ...state,
-        timeline: { ...state.timeline, next: { instanceId: c, startsAt: Date.now() + 60_000 } },
-      }));
+      // B stays on air (same instance, kept in place) for 4 s, then C.
+      await setPlaylist({ instanceId: b, durationMs: 4_000 }, c);
+      const startsAt = storbild.hub.state.timeline.next?.startsAt as number;
+      expect(storbild.hub.state.timeline.next?.instanceId).toBe(c);
       await forAll(async (page) => {
         await scene(page, "main", "ready").locator(".probe", { hasText: "C" }).waitFor({
           state: "attached",
@@ -217,16 +224,33 @@ describe.skipIf(!enabled)("viewer", () => {
         await scene(page, "main").locator(".probe", { hasText: "B" }).waitFor();
       });
 
-      await setPlaylist(c, b);
       await forAll(async (page) => {
         await scene(page, "main").locator(".probe", { hasText: "C" }).waitFor();
         const events = await probeEvents(page);
         expect(events.filter((event) => event === "prepare C")).toHaveLength(1);
       });
-      storbild.hub.update(({ timeline: { next: _, ...timeline }, ...state }) => ({
-        ...state,
-        timeline,
-      }));
+      // The switch happened at the scheduled start, not before it.
+      expect(Date.now()).toBeGreaterThanOrEqual(startsAt - 200);
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "the rotation keeps switching on both screens while they are offline",
+    async () => {
+      const p = await probe("P");
+      const q = await probe("Q");
+      await setPlaylist({ instanceId: p, durationMs: 2_000 }, { instanceId: q, durationMs: 2_000 });
+      await forAll((page) => scene(page, "main").locator(".probe", { hasText: "P" }).waitFor());
+
+      await Promise.all(screens.map(({ context }) => context.setOffline(true)));
+      // No patches arrive: each screen switches on its own clock.
+      await forAll(async (page) => {
+        await scene(page, "main").locator(".probe", { hasText: "Q" }).waitFor();
+        await scene(page, "main").locator(".probe", { hasText: "P" }).waitFor();
+      });
+      await Promise.all(screens.map(({ context }) => context.setOffline(false)));
+      expect(await Promise.all(screens.map(({ page }) => bootId(page)))).toEqual(boots);
     },
     TIMEOUT,
   );
@@ -235,16 +259,13 @@ describe.skipIf(!enabled)("viewer", () => {
     "an interrupt shows above main and dims it; blackout covers everything",
     async () => {
       const d = await probe("D");
-      const set = (change: Partial<ShowState["timeline"]>) =>
-        storbild.hub.update((state) => ({ ...state, timeline: { ...state.timeline, ...change } }));
-
-      set({ interrupt: { instanceId: d, startedAt: Date.now(), dimBelow: true } });
+      await command("live.interrupt", { instanceId: d, dimBelow: true });
       await forAll(async (page) => {
         await scene(page, "interrupt").locator(".probe", { hasText: "D" }).waitFor();
         await page.locator("sb-compositor .dim.on").waitFor({ state: "attached" });
       });
 
-      set({ blackout: true });
+      await command("live.blackout", { on: true });
       await forAll(async (page) => {
         const blackout = page.locator("sb-compositor .blackout.on");
         await blackout.waitFor({ state: "attached" });
@@ -254,10 +275,8 @@ describe.skipIf(!enabled)("viewer", () => {
         );
       });
 
-      storbild.hub.update(({ timeline: { interrupt: _, ...timeline }, ...state }) => ({
-        ...state,
-        timeline: { ...timeline, blackout: false },
-      }));
+      await command("live.clearInterrupt", {});
+      await command("live.blackout", { on: false });
       await forAll(async (page) => {
         await page.locator("sb-compositor .interrupt > .scene").waitFor({ state: "detached" });
         await page.locator("sb-compositor .dim.on").waitFor({ state: "detached" });

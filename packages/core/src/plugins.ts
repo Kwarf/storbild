@@ -131,7 +131,7 @@ export function reconcileInstance(catalog: PluginCatalog, instance: Instance): I
 }
 
 function typeInfo(type: LoadedType): PluginTypeInfo {
-  const { config: _, configVersion: __, migrate: ___, ...info } = type;
+  const { config: _, configVersion: __, migrate: ___, duration: ____, ...info } = type;
   return info;
 }
 

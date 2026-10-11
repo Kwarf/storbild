@@ -11,6 +11,7 @@ import {
   PluginRuntime,
   type RestartOptions,
 } from "./plugins/index.ts";
+import { Scheduler, type SchedulerTimers } from "./scheduler.ts";
 import type { StreamOptions } from "./sse.ts";
 import { StateHub } from "./state-hub.ts";
 import { loadState, saveState } from "./store.ts";
@@ -21,6 +22,7 @@ export interface Storbild {
   viewer: Bun.Server<undefined>;
   admin: Bun.Server<undefined>;
   hub: StateHub;
+  scheduler: Scheduler;
   plugins: PluginRuntime;
   modules: ModuleRegistry;
   stop(): Promise<void>;
@@ -36,6 +38,8 @@ export interface StartOptions {
   builtinPluginsDir?: string | null;
   /** Backoff for restarting failed plugin server parts. */
   pluginRestart?: RestartOptions;
+  /** Timers for the scheduler, to drive time in tests. */
+  timers?: SchedulerTimers;
 }
 
 /**
@@ -70,6 +74,8 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   // Plugin status, versions and module URLs may differ from the stored show. Applying them as
   // a new revision means viewers resuming at the stored revision receive the change.
   hub.update((state) => reconcilePlugins(state, catalog));
+  const scheduler = new Scheduler(hub, { now, ...(options.timers && { timers: options.timers }) });
+  scheduler.start();
   const viewerBundle = await getViewerBundle();
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
@@ -99,9 +105,11 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     viewer,
     admin,
     hub,
+    scheduler,
     plugins,
     modules: registry,
     async stop() {
+      scheduler.stop();
       plugins.stop();
       // Force-close open SSE streams; clients reconnect and resume.
       await Promise.all([viewer.stop(true), admin.stop(true)]);

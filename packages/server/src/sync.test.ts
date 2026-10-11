@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { applyPatch, type JsonPatchOp, parseConfig, type ShowState } from "@storbild/core";
 import { type StartOptions, type Storbild, start } from "./main.ts";
-import { SseClient } from "./testing.ts";
+import { FakeClock, SseClient } from "./testing.ts";
 
 const BUFFER_SIZE = 4;
 
@@ -89,10 +89,11 @@ describe("GET /events", () => {
     await snapshotOf(client);
     const { id: itemId } = await command("playlist.addItem", { instanceId: id });
     const { ops } = await patchOf(client);
+    const startedAt = storbild.hub.state.timeline.main?.startedAt as number;
     expect(ops).toContainEqual({
       op: "add",
       path: "/timeline/main",
-      value: { instanceId: id, itemId, startedAt: expect.any(Number) },
+      value: { instanceId: id, itemId, startedAt, endsAt: startedAt + 15_000 },
     });
   });
 
@@ -208,5 +209,122 @@ describe("GET /api/events", () => {
     const state = await snapshotOf(client);
     await createInstance("A");
     expect((await patchOf(client)).revision).toBe(state.revision + 1);
+  });
+});
+
+describe("scheduler", () => {
+  let clock: FakeClock;
+
+  beforeEach(async () => {
+    await storbild.stop();
+    clock = new FakeClock(1_000_000);
+    await boot({ now: clock.now, timers: clock.timers });
+  });
+
+  /** A playlist of one instance per duration, in order. */
+  async function rotation(...durations: number[]) {
+    const items: string[] = [];
+    for (const [i, durationMs] of durations.entries()) {
+      const { id } = await createInstance(`Item ${i}`);
+      items.push((await command("playlist.addItem", { instanceId: id, durationMs })).id as string);
+    }
+    return items;
+  }
+
+  /** Follows a stream, applying patches as they arrive, until `ready(state)` holds. */
+  async function follow(client: SseClient, state: ShowState, ready: (state: ShowState) => boolean) {
+    while (!ready(state)) {
+      const patch = await patchOf(client);
+      state = applyPatch(state, patch.ops);
+    }
+    return state;
+  }
+
+  test("the rotation advances on the stream when the next item starts", async () => {
+    const [a, b] = await rotation(10_000, 20_000);
+    const client = await connect();
+    let state = await snapshotOf(client);
+    expect(state.timeline).toMatchObject({
+      main: { itemId: a, startedAt: 1_000_000, endsAt: 1_010_000 },
+      next: { itemId: b, startsAt: 1_010_000 },
+    });
+
+    await clock.advance(10_000);
+    state = await follow(client, state, (s) => s.timeline.main?.itemId === b);
+    expect(state.timeline.main).toMatchObject({ startedAt: 1_010_000, endsAt: 1_030_000 });
+    await clock.advance(20_000);
+    state = await follow(client, state, (s) => s.timeline.main?.itemId === a);
+    expect(state.timeline.main?.startedAt).toBe(1_030_000);
+    expect(state).toEqual(storbild.hub.state);
+  });
+
+  test("live commands take over, and the rotation continues after them", async () => {
+    const [a, b] = await rotation(10_000, 20_000);
+    const { id: x } = await createInstance("Take");
+    await command("live.take", { instanceId: x, durationMs: 5_000 });
+    expect(storbild.hub.state.timeline).toMatchObject({
+      mode: "override",
+      main: { instanceId: x, startedAt: 1_000_000, endsAt: 1_005_000 },
+      next: { itemId: b, startsAt: 1_005_000 },
+    });
+    await clock.advance(5_000);
+    expect(storbild.hub.state.timeline).toMatchObject({ mode: "auto", main: { itemId: b } });
+    expect(storbild.hub.state.live.main).toBeUndefined();
+
+    await command("live.interrupt", { instanceId: x, dimBelow: true });
+    await command("live.blackout", { on: true });
+    expect(storbild.hub.state.timeline).toMatchObject({
+      mode: "override",
+      interrupt: { instanceId: x, dimBelow: true },
+      blackout: true,
+    });
+    await command("live.resume", {});
+    expect(storbild.hub.state.timeline).toMatchObject({ mode: "auto", main: { itemId: a } });
+  });
+
+  test("live commands reject unknown and unplayable instances", async () => {
+    const res = await fetch(new URL("/api/commands", storbild.admin.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "live.take", payload: { instanceId: "nope" } }),
+    });
+    expect(res.status).toBe(404);
+    const clear = await fetch(new URL("/api/commands", storbild.admin.url), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "live.clearInterrupt", payload: {} }),
+    });
+    expect(clear.status).toBe(422);
+  });
+
+  test("fires a cue at its time", async () => {
+    await rotation(10_000);
+    const x = (await createInstance("Cue")).id as string;
+    storbild.hub.update((state) => ({
+      ...state,
+      cues: [
+        { id: "q", at: 1_003_000, action: { type: "interrupt", instanceId: x, durationMs: 1_000 } },
+      ],
+    }));
+    await clock.advance(3_000);
+    expect(storbild.hub.state.cues[0]?.fired).toBe(true);
+    expect(storbild.hub.state.timeline.interrupt).toMatchObject({
+      instanceId: x,
+      startedAt: 1_003_000,
+    });
+    await clock.advance(1_000);
+    expect(storbild.hub.state.timeline.interrupt).toBeUndefined();
+  });
+
+  test("a restart resumes the rotation where time says it is", async () => {
+    const [, b] = await rotation(10_000, 20_000);
+    await storbild.stop();
+    await clock.advance(25_000);
+    await boot({ now: clock.now, timers: clock.timers });
+    expect(storbild.hub.state.timeline.main).toMatchObject({
+      itemId: b,
+      startedAt: 1_010_000,
+      endsAt: 1_030_000,
+    });
   });
 });

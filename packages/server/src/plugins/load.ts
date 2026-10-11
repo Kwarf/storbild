@@ -2,6 +2,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import {
   API_VERSION,
+  type Duration,
   type LoadedPlugin,
   type LoadedType,
   type Migrate,
@@ -124,11 +125,12 @@ export async function loadPlugin(
     if (def.settings) checkJsonSchema(def.settings, "settings");
     for (const [name, type] of Object.entries(def.types)) {
       checkJsonSchema(type.config, `config of type ${name}`);
-      const { duration: _, configVersion, migrate, ...info } = type;
+      const { configVersion, migrate, duration, ...info } = type;
       types[name] = {
         ...info,
         configVersion: configVersion ?? 1,
         ...(migrate && { migrate: migrate as Migrate }),
+        ...(duration && { duration: duration as Duration }),
       };
     }
     if (pkg.storbild?.viewer) viewer = await bundleViewer(join(dir, pkg.storbild.viewer));

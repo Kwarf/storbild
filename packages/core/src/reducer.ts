@@ -1,9 +1,11 @@
 import type { Command, HostCommand } from "./commands.ts";
+import { endOverride, interrupt, take } from "./live-control.ts";
 import { type Issue, type Normalized, normalizeConfig, normalizeSettings } from "./plugins.ts";
 import type { Instance } from "./schema/instance.ts";
 import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
 import type { ShowState } from "./schema/state.ts";
+import { isPlayableScene, resolveTimeline } from "./timeline.ts";
 
 export interface CommandContext {
   /** Server time of the command, epoch ms. */
@@ -103,10 +105,14 @@ function reduce(
         throw new CommandError("invalid", `instance ${id} is the background of theme ${theme.id}`);
       }
       const { [id]: _, ...instances } = state.instances;
+      const live = { ...state.live };
+      if (live.main?.instanceId === id) delete live.main;
+      if (live.interrupt?.instanceId === id) delete live.interrupt;
       return {
         state: {
           ...state,
           instances,
+          live,
           playlist: {
             ...state.playlist,
             items: state.playlist.items.filter((item) => item.instanceId !== id),
@@ -185,6 +191,26 @@ function reduce(
       };
     }
 
+    case "live.take":
+      checkScene(state, command.payload.instanceId);
+      return { state: take(state, command.payload, ctx.now) };
+
+    case "live.interrupt":
+      checkScene(state, command.payload.instanceId);
+      return { state: interrupt(state, command.payload, ctx.now) };
+
+    case "live.clearInterrupt":
+      if (!resolveTimeline(state, ctx.now).interrupt) {
+        throw new CommandError("invalid", "no interrupt is active");
+      }
+      return { state: endOverride(state, ctx.now) };
+
+    case "live.resume":
+      return { state: endOverride(state, ctx.now) };
+
+    case "live.blackout":
+      return { state: { ...state, live: { ...state.live, blackout: command.payload.on } } };
+
     case "instance.setState": {
       const { id, state: value } = command.payload;
       const instance = { ...getInstance(state, id), state: value };
@@ -207,6 +233,14 @@ function getInstance(state: ShowState, id: string): Instance {
   const instance = state.instances[id];
   if (!instance) throw new CommandError("not_found", `instance ${id} not found`);
   return instance;
+}
+
+/** Live control shows only scenes that can render. */
+function checkScene(state: ShowState, id: string) {
+  getInstance(state, id);
+  if (!isPlayableScene(state, id)) {
+    throw new CommandError("invalid", `instance ${id} is broken or not a scene`);
+  }
 }
 
 function getItemIndex(state: ShowState, id: string): number {

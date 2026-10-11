@@ -3,6 +3,7 @@ import { assetMetaSchema } from "./asset.ts";
 import { idSchema } from "./common.ts";
 import { cueSchema } from "./cue.ts";
 import { instanceSchema } from "./instance.ts";
+import { liveSchema } from "./live.ts";
 import { overlayPlacementSchema } from "./overlay.ts";
 import { playlistSchema } from "./playlist.ts";
 import { pluginEntrySchema } from "./plugin.ts";
@@ -18,12 +19,13 @@ export const showStateSchema = z.object({
   overlays: z.array(overlayPlacementSchema),
   themes: z.record(idSchema, themeSchema),
   activeThemeId: idSchema,
+  live: liveSchema,
   timeline: timelineSchema,
   assets: z.record(z.string(), assetMetaSchema),
 });
 export type ShowState = z.infer<typeof showStateSchema>;
 
-/** Shown until the scheduler (M4) resolves a real timeline. */
+/** Nothing on air: only the theme background. */
 export const placeholderTimeline: Timeline = { mode: "auto", blackout: false };
 
 export function createDefaultTheme(id: string): Theme {
@@ -48,6 +50,7 @@ export function createInitialState(ctx: { now: number; newId: () => string }): S
     overlays: [],
     themes: { [theme.id]: theme },
     activeThemeId: theme.id,
+    live: { blackout: false },
     timeline: placeholderTimeline,
     assets: {},
   };

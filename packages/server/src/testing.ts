@@ -6,6 +6,7 @@ import {
 } from "@storbild/core";
 import { z } from "zod";
 import { openDatabase } from "./db.ts";
+import type { SchedulerTimers } from "./scheduler.ts";
 import { StateHub } from "./state-hub.ts";
 import { saveState } from "./store.ts";
 
@@ -43,6 +44,47 @@ export function createTestHub(bufferSize?: number): StateHub {
     catalog: testCatalog,
     ...(bufferSize !== undefined && { bufferSize }),
   });
+}
+
+/** A clock and timers that only move when told to, for the scheduler. */
+export class FakeClock {
+  #now: number;
+  #nextId = 0;
+  readonly #pending = new Map<number, { at: number; fn: () => void }>();
+
+  constructor(now: number) {
+    this.#now = now;
+  }
+
+  readonly now = () => this.#now;
+
+  readonly timers: SchedulerTimers = {
+    setTimeout: (fn, ms) => {
+      const id = ++this.#nextId;
+      this.#pending.set(id, { at: this.#now + ms, fn });
+      return id;
+    },
+    clearTimeout: (handle) => {
+      this.#pending.delete(handle as number);
+    },
+  };
+
+  /** Moves time forward, firing due timers in order and letting watchers run in between. */
+  async advance(ms: number) {
+    const end = this.#now + ms;
+    for (;;) {
+      await Bun.sleep(0);
+      const [id, timer] = [...this.#pending].reduce<[number, { at: number; fn: () => void }] | []>(
+        (earliest, entry) => (earliest[1] && earliest[1].at <= entry[1].at ? earliest : entry),
+        [],
+      );
+      if (id === undefined || !timer || timer.at > end) break;
+      this.#pending.delete(id);
+      this.#now = Math.max(this.#now, timer.at);
+      timer.fn();
+    }
+    this.#now = end;
+  }
 }
 
 export interface SseFrame {

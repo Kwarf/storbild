@@ -1,7 +1,9 @@
 import type { Database } from "bun:sqlite";
 import {
   cueSchema,
+  idSchema,
   instanceSchema,
+  liveSchema,
   overlayPlacementSchema,
   type PluginEntry,
   placeholderTimeline,
@@ -28,6 +30,7 @@ const allKeys: readonly Key[] = [
   "overlays",
   "themes",
   "activeThemeId",
+  "live",
   "timeline",
   "assets",
 ];
@@ -53,11 +56,13 @@ export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = 
       switch (key) {
         case "revision":
         case "activeThemeId":
+        case "live":
         case "timeline":
           meta(key, state[key]);
           break;
         case "playlist":
           meta("playlist.anchorAt", state.playlist.anchorAt);
+          meta("playlist.anchorItemId", state.playlist.anchorItemId ?? null);
           rewrite(
             "playlist_items",
             ["id", "position", "data"],
@@ -127,6 +132,8 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     return result;
   }
   function metaValue<T>(key: string, schema: z.ZodType<T>, fallback: T): T {
+    // Keys added after a database was created are absent rather than invalid.
+    if (!meta.has(key)) return fallback;
     const parsed = schema.safeParse(meta.get(key));
     if (parsed.success) return parsed.data;
     log(`invalid meta ${key}, using the default`);
@@ -152,6 +159,7 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     };
   }
 
+  const anchorItemId = metaValue("playlist.anchorItemId", idSchema.nullable(), null);
   return {
     revision: metaValue("revision", z.number().int().nonnegative(), 0),
     plugins,
@@ -163,6 +171,7 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
         "playlist item",
       ),
       anchorAt: metaValue("playlist.anchorAt", z.number().int(), 0),
+      ...(anchorItemId !== null && { anchorItemId }),
     },
     cues: rows("SELECT id, data FROM cues", cueSchema, "cue"),
     overlays: rows(
@@ -172,6 +181,7 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     ),
     themes: byId(rows("SELECT id, data FROM themes", themeSchema, "theme")),
     activeThemeId: metaValue("activeThemeId", z.string(), ""),
+    live: metaValue("live", liveSchema, { blackout: false }),
     timeline: metaValue("timeline", timelineSchema, placeholderTimeline),
     assets: {},
   };

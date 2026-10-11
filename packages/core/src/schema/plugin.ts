@@ -61,6 +61,7 @@ const fn = z.custom<(...args: never[]) => unknown>((value) => typeof value === "
 });
 
 export type Migrate = (fromVersion: number, config: unknown) => unknown;
+export type Duration = (config: unknown, settings: unknown) => unknown;
 
 /**
  * The runtime shape of what `definePlugin` returns. The SDK adds the static types; the host
@@ -91,6 +92,8 @@ export interface LoadedType extends PluginTypeInfo {
   /** The current config version; stored configs with a lower one are migrated. */
   configVersion: number;
   migrate?: Migrate;
+  /** Computes how long an instance runs from its config and the plugin settings. */
+  duration?: Duration;
 }
 
 /** A plugin as the host loaded it. `types` is absent when the plugin is unusable. */

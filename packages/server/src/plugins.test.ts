@@ -77,6 +77,27 @@ beforeAll(async () => {
     ),
   });
 
+  writePlugin(join(fixtures, "timed"), {
+    "plugin.ts": `
+      import { API_VERSION, definePlugin, z } from "@storbild/plugin-sdk";
+      export default definePlugin({
+        id: "timed",
+        version: "1.0.0",
+        apiVersion: API_VERSION,
+        settings: z.object({ seconds: z.number().default(7) }),
+        types: {
+          t: {
+            kind: "scene",
+            label: "T",
+            viewer: "x-t",
+            config: z.object({ times: z.number().default(1) }),
+            duration: (config, settings) => config.times * settings.seconds * 1000,
+          },
+        },
+      });
+    `,
+  });
+
   storbild = await start(
     parseConfig({
       STORBILD_VIEWER_PORT: "0",
@@ -93,6 +114,7 @@ beforeAll(async () => {
           "bad-viewer",
           "crash",
           "needs-settings",
+          "timed",
         ].map((name) => join(fixtures, name)),
       ].join(":"),
     }),
@@ -227,6 +249,22 @@ describe("external plugin (M2 acceptance)", () => {
       settings: { greeting: 5 },
     });
     expect(settings.status).toBe(422);
+  });
+
+  test("a type's duration() sets the playlist item's resolved duration", async () => {
+    const created = await command("instance.create", {
+      plugin: "timed",
+      type: "t",
+      name: "Timed",
+      config: { times: 2 },
+    });
+    const added = await command("playlist.addItem", { instanceId: created.body.id });
+    const item = () => storbild.hub.state.playlist.items.find((i) => i.id === added.body.id);
+    expect(item()?.resolvedDurationMs).toBe(14_000);
+    await command("plugin.updateSettings", { plugin: "timed", settings: { seconds: 3 } });
+    expect(item()?.resolvedDurationMs).toBe(6_000);
+    // The function stays on the server; state only describes the type.
+    expect(Object.keys(plugin("timed")?.types.t ?? {})).not.toContain("duration");
   });
 
   test("server part writes plugin state that arrives as a patch on /events", async () => {

@@ -306,4 +306,24 @@ describe("applyCommand", () => {
     });
     expect(parsed.success).toBe(false);
   });
+
+  test("live.take and live.interrupt need a playable scene", () => {
+    const s = setup();
+    const take = (instanceId: string) => () =>
+      s.run({ type: "live.take", payload: { instanceId } });
+    expect(errorOf(take("nope")).code).toBe("not_found");
+    const overlay = s.run({
+      type: "instance.create",
+      payload: { plugin: "markdown", type: "counter", name: "N", config: { count: 1 } },
+    }) as string;
+    expect(errorOf(take(overlay)).code).toBe("invalid");
+    expect(
+      errorOf(() => s.run({ type: "live.interrupt", payload: { instanceId: overlay } })).code,
+    ).toBe("invalid");
+  });
+
+  test("live.clearInterrupt without an interrupt is invalid", () => {
+    const s = setup();
+    expect(errorOf(() => s.run({ type: "live.clearInterrupt", payload: {} })).code).toBe("invalid");
+  });
 });
