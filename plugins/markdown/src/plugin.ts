@@ -1,16 +1,16 @@
-import { API_VERSION, definePlugin, z } from "@storbild/plugin-sdk";
+import { API_VERSION, definePlugin, fields, z } from "@storbild/plugin-sdk";
 
 export default definePlugin({
   id: "markdown",
-  version: "0.1.0",
+  version: "0.2.0",
   apiVersion: API_VERSION,
   settings: z.object({ fontScale: z.number().positive().default(1) }),
   types: {
     text: {
       kind: "scene",
       label: "Markdown text",
-      config: z.object({ title: z.string().optional(), content: z.string() }),
-      duration: () => 15_000,
+      // No duration of its own: text runs for the show's default duration.
+      config: z.object({ title: z.string().optional(), content: fields.markdown() }),
       viewer: "sb-markdown-scene",
     },
   },

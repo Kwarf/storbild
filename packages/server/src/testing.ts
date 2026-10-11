@@ -81,6 +81,7 @@ export interface TestAdminAppOptions {
   publicUrl?: string;
   clock?: FakeClock;
   bundle?: AdminAppDeps["bundle"];
+  schemas?: AdminAppDeps["schemas"];
 }
 
 /** An admin app on `createTestHub()`, with sessions in memory and time on a `FakeClock`. */
@@ -88,6 +89,7 @@ export function createTestAdminApp({
   publicUrl = "http://localhost",
   clock = new FakeClock(1_000_000),
   bundle,
+  schemas,
 }: TestAdminAppOptions = {}) {
   const hub = createTestHub();
   const sessions = new SessionStore(openDatabase(":memory:"), { now: clock.now });
@@ -102,6 +104,7 @@ export function createTestAdminApp({
       limiter: new LoginLimiter({ now: clock.now }),
     },
     ...(bundle && { bundle }),
+    ...(schemas && { schemas }),
   });
   return { app, hub, sessions, clock };
 }

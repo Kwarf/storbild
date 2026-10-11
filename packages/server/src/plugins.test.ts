@@ -156,8 +156,8 @@ describe("plugin host", () => {
   test("loads built-in and external plugins", () => {
     expect(plugin("markdown")).toMatchObject({
       status: "ok",
-      version: "0.1.0",
-      module: "/plugins/markdown/0.1.0/viewer.js",
+      version: "0.2.0",
+      module: "/plugins/markdown/0.2.0/viewer.js",
       settings: { fontScale: 1 },
       types: { text: { kind: "scene", label: "Markdown text", viewer: "sb-markdown-scene" } },
     });
@@ -359,10 +359,29 @@ describe("external plugin (M2 acceptance)", () => {
   }, 30_000);
 });
 
+describe("schemas", () => {
+  test("the admin serves each usable plugin's settings and config as JSON Schema", async () => {
+    const res = await fetch(new URL("/api/schemas", storbild.admin.url), {
+      headers: await adminHeaders(storbild.admin.url),
+    });
+    const schemas = (await res.json()) as Record<string, { settings?: object; types: object }>;
+    expect(schemas.markdown).toMatchObject({
+      settings: { type: "object", properties: { fontScale: { type: "number", default: 1 } } },
+      types: {
+        text: {
+          type: "object",
+          properties: { content: { type: "string", "x-storbild-widget": "markdown" } },
+        },
+      },
+    });
+    expect(schemas.incompatible).toBeUndefined();
+  });
+});
+
 describe("modules", () => {
   test("serve each plugin's viewer module with host modules left external", async () => {
     for (const app of [storbild.viewer, storbild.admin]) {
-      const res = await fetch(new URL("/plugins/markdown/0.1.0/viewer.js", app.url));
+      const res = await fetch(new URL("/plugins/markdown/0.2.0/viewer.js", app.url));
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/javascript");
       expect(res.headers.get("Cache-Control")).toContain("immutable");
@@ -389,6 +408,7 @@ describe("modules", () => {
       "zod",
       "@storbild/plugin-sdk",
       "@storbild/plugin-sdk/viewer",
+      "@storbild/plugin-sdk/admin",
     ]) {
       expect(imports[specifier]).toMatch(/^\/vendor\/[0-9a-f]{12}\//);
     }
@@ -429,5 +449,13 @@ describe("restart", () => {
     await storbild.stop();
     storbild = await start(config);
     expect(storbild.hub.state.revision).toBe(state.revision);
+
+    // Removing the missing plugin deletes its data and instances for good.
+    expect((await command("plugin.remove", { plugin: "markdown" })).status).toBe(422);
+    expect((await command("plugin.remove", { plugin: "external" })).status).toBe(200);
+    expect(storbild.hub.state.plugins.external).toBeUndefined();
+    expect(Object.values(storbild.hub.state.instances).some((i) => i.plugin === "external")).toBe(
+      false,
+    );
   });
 });

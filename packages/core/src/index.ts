@@ -1,6 +1,7 @@
 export * from "./clock.ts";
 export * from "./commands.ts";
 export { type Config, ConfigError, parseConfig } from "./config.ts";
+export * from "./duration.ts";
 export * from "./json-patch.ts";
 export * from "./live-control.ts";
 export * from "./plugins.ts";
@@ -14,6 +15,7 @@ export * from "./schema/live.ts";
 export * from "./schema/overlay.ts";
 export * from "./schema/playlist.ts";
 export * from "./schema/plugin.ts";
+export * from "./schema/settings.ts";
 export * from "./schema/state.ts";
 export * from "./schema/theme.ts";
 export * from "./schema/timeline.ts";

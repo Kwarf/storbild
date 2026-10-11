@@ -70,7 +70,8 @@ describe("viewer app", () => {
 });
 
 describe("admin app", () => {
-  const { app, hub } = createTestAdminApp({ bundle: adminBundle });
+  const schemas = { markdown: { types: { text: { type: "object" } } } };
+  const { app, hub } = createTestAdminApp({ bundle: adminBundle, schemas });
   let cookie: string;
   beforeAll(async () => {
     const res = await app.request("/login", {
@@ -129,6 +130,13 @@ describe("admin app", () => {
     const res = await app.request("/api/time", { headers: { Cookie: cookie } });
     expect(res.headers.get("Cache-Control")).toBe("no-store");
     expect(await res.json()).toEqual({ now: 1_000_000 });
+  });
+
+  test("serves the plugins' JSON Schemas behind the session, uncached", async () => {
+    expect((await app.request("/api/schemas")).status).toBe(401);
+    const res = await app.request("/api/schemas", { headers: { Cookie: cookie } });
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual(schemas);
   });
 
   test("applies a command and returns the revision and new ID", async () => {

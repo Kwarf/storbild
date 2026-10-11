@@ -5,16 +5,15 @@ import type { PluginModule } from "./load.ts";
 /** Everything the browser loads for plugins: vendor modules, plugin modules, the import map. */
 export interface ModuleRegistry {
   vendor: Vendor;
-  /** Bundled viewer modules by plugin ID. */
+  /** Bundled browser modules (viewer and admin) by plugin ID. */
   plugins: Map<string, { version: string; files: ModuleFiles }>;
   importMap: { imports: Record<string, string> };
 }
 
 export function createModuleRegistry(vendor: Vendor, modules: Iterable<PluginModule>) {
   const plugins: ModuleRegistry["plugins"] = new Map();
-  for (const { plugin, viewer } of modules) {
-    if (viewer && plugin.version)
-      plugins.set(plugin.id, { version: plugin.version, files: viewer });
+  for (const { plugin, files } of modules) {
+    if (files && plugin.version) plugins.set(plugin.id, { version: plugin.version, files });
   }
   const imports = Object.fromEntries(
     Object.entries(vendor.specifiers).map(([specifier, path]) => [

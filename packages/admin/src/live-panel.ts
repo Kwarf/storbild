@@ -18,7 +18,7 @@ const belowOptions: [InterruptBelow, string][] = [
 
 /**
  * The Live panel (DESIGN.md §8.2): announce (an interrupt), take now, resume and blackout.
- * Quick announce with a typed message arrives with the announcement plugin (M6).
+ * Quick announce with a typed message arrives with the announcement plugin (M6b).
  */
 export class LivePanel extends LitElement {
   static override properties: PropertyDeclarations = {

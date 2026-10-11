@@ -16,5 +16,13 @@ export default definePlugin({
       }),
       viewer: "probe-scene",
     },
+    // Edited with a custom editor from the plugin's admin module.
+    card: {
+      kind: "scene",
+      label: "Probe card",
+      config: z.object({ text: z.string().min(1) }),
+      viewer: "probe-card",
+      editor: "probe-card-editor",
+    },
   },
 });

@@ -6,10 +6,11 @@
   "exports": {
     ".": "./src/index.ts",
     "./viewer": "./src/viewer.ts",
+    "./admin": "./src/admin.ts",
     "./build": "./src/build.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.build.json"
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@storbild/core": "workspace:*"

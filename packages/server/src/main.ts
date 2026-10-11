@@ -116,6 +116,9 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       modules: registry,
       bundle: adminBundle,
       plugins,
+      schemas: Object.fromEntries(
+        [...modules].flatMap(([id, { schemas }]) => (schemas ? [[id, schemas]] : [])),
+      ),
       ...(stream && { stream }),
     }).fetch,
   });

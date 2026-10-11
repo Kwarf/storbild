@@ -61,6 +61,15 @@ function reduce(
   switch (command.type) {
     case "instance.create": {
       const { config, configVersion, background, ...rest } = command.payload;
+      const singleton = state.plugins[rest.plugin]?.types[rest.type]?.singleton;
+      if (
+        singleton &&
+        Object.values(state.instances).some(
+          (other) => other.plugin === rest.plugin && other.type === rest.type,
+        )
+      ) {
+        throw new CommandError("invalid", `${rest.plugin}/${rest.type} allows only one instance`);
+      }
       const instance: Instance = {
         id: ctx.newId(),
         ...rest,
@@ -98,31 +107,7 @@ function reduce(
     case "instance.delete": {
       const { id } = command.payload;
       getInstance(state, id);
-      const theme = Object.values(state.themes).find(
-        (t) => t.background.type === "scene" && t.background.instanceId === id,
-      );
-      if (theme) {
-        throw new CommandError("invalid", `instance ${id} is the background of theme ${theme.id}`);
-      }
-      const { [id]: _, ...instances } = state.instances;
-      const live = { ...state.live };
-      if (live.main?.instanceId === id) delete live.main;
-      if (live.interrupt?.instanceId === id) delete live.interrupt;
-      return {
-        state: {
-          ...state,
-          instances,
-          live,
-          playlist: {
-            ...state.playlist,
-            items: state.playlist.items.filter((item) => item.instanceId !== id),
-          },
-          overlays: state.overlays.filter((placement) => placement.instanceId !== id),
-          cues: state.cues.filter(
-            (cue) => !("instanceId" in cue.action) || cue.action.instanceId !== id,
-          ),
-        },
-      };
+      return { state: withoutInstances(state, new Set([id])) };
     }
 
     case "playlist.addItem": {
@@ -173,6 +158,25 @@ function reduce(
       const value = unwrap(normalizeSettings(ctx.catalog, plugin, settings));
       return { state: withPlugin(state, plugin, { ...entry, settings: value }) };
     }
+
+    case "plugin.remove": {
+      const { plugin } = command.payload;
+      if (getPlugin(state, plugin).status !== "missing") {
+        throw new CommandError(
+          "invalid",
+          `plugin ${plugin} is installed; only a missing plugin can be removed`,
+        );
+      }
+      const ids = Object.values(state.instances)
+        .filter((instance) => instance.plugin === plugin)
+        .map((instance) => instance.id);
+      const next = withoutInstances(state, new Set(ids));
+      const { [plugin]: _, ...plugins } = next.plugins;
+      return { state: { ...next, plugins } };
+    }
+
+    case "settings.update":
+      return { state: { ...state, settings: merge(state.settings, command.payload) } };
 
     case "plugin.setState": {
       const { plugin, state: value } = command.payload;
@@ -227,6 +231,42 @@ function getPlugin(state: ShowState, id: string): PluginEntry {
 
 function withPlugin(state: ShowState, id: string, entry: PluginEntry): ShowState {
   return { ...state, plugins: { ...state.plugins, [id]: entry } };
+}
+
+/**
+ * Deletes instances along with the playlist items, overlay placements, cues and live control
+ * that reference them (DESIGN.md §5.3). An instance that is a theme's background can't go.
+ */
+function withoutInstances(state: ShowState, ids: ReadonlySet<string>): ShowState {
+  if (ids.size === 0) return state;
+  const theme = Object.values(state.themes).find(
+    (t) => t.background.type === "scene" && ids.has(t.background.instanceId),
+  );
+  if (theme?.background.type === "scene") {
+    throw new CommandError(
+      "invalid",
+      `instance ${theme.background.instanceId} is the background of theme ${theme.id}`,
+    );
+  }
+  const instances = Object.fromEntries(
+    Object.entries(state.instances).filter(([id]) => !ids.has(id)),
+  );
+  const live = { ...state.live };
+  if (live.main && ids.has(live.main.instanceId)) delete live.main;
+  if (live.interrupt && ids.has(live.interrupt.instanceId)) delete live.interrupt;
+  return {
+    ...state,
+    instances,
+    live,
+    playlist: {
+      ...state.playlist,
+      items: state.playlist.items.filter((item) => !ids.has(item.instanceId)),
+    },
+    overlays: state.overlays.filter((placement) => !ids.has(placement.instanceId)),
+    cues: state.cues.filter(
+      (cue) => !("instanceId" in cue.action) || !ids.has(cue.action.instanceId),
+    ),
+  };
 }
 
 function getInstance(state: ShowState, id: string): Instance {

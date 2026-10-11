@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import {
   cueSchema,
+  defaultShowSettings,
   idSchema,
   instanceSchema,
   liveSchema,
@@ -10,6 +11,7 @@ import {
   playlistItemSchema,
   pluginEntrySchema,
   type ShowState,
+  showSettingsSchema,
   themeSchema,
   timelineSchema,
 } from "@storbild/core";
@@ -33,6 +35,7 @@ const allKeys: readonly Key[] = [
   "live",
   "timeline",
   "assets",
+  "settings",
 ];
 
 /**
@@ -58,6 +61,7 @@ export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = 
         case "activeThemeId":
         case "live":
         case "timeline":
+        case "settings":
           meta(key, state[key]);
           break;
         case "playlist":
@@ -184,5 +188,6 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     live: metaValue("live", liveSchema, { blackout: false }),
     timeline: metaValue("timeline", timelineSchema, placeholderTimeline),
     assets: {},
+    settings: metaValue("settings", showSettingsSchema, defaultShowSettings),
   };
 }

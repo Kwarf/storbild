@@ -47,7 +47,7 @@ export class Compositor extends LitElement {
       height: 100%;
     }
     .background {
-      transition: background-color ${TRANSITION_MS}ms ease-in-out;
+      transition: background-color var(--sb-compositor-transition) ease-in-out;
     }
     .dim,
     .cover,
@@ -55,7 +55,7 @@ export class Compositor extends LitElement {
       background: #000;
       opacity: 0;
       pointer-events: none;
-      transition: opacity ${TRANSITION_MS}ms ease-in-out;
+      transition: opacity var(--sb-compositor-transition) ease-in-out;
     }
     .dim.on {
       opacity: 0.75;
@@ -78,6 +78,9 @@ export class Compositor extends LitElement {
 
   protected override willUpdate() {
     const { state, ctx } = this;
+    // The fades of the background, dim, cover and blackout follow the show's setting.
+    const fadeMs = state?.settings?.transitionMs ?? TRANSITION_MS;
+    this.style.setProperty("--sb-compositor-transition", `${fadeMs}ms`);
     const now = ctx?.serverNow();
     this.#timeline = state && now !== undefined ? resolveTimeline(state, now) : undefined;
     this.#arm(this.#timeline, now);

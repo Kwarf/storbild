@@ -8,10 +8,11 @@ import {
   withTimeout,
 } from "./modules.ts";
 
-/** Crossfade length (DESIGN.md §11). Becomes a global setting in M6. */
+/** Crossfade length for a state without settings; shows set it in `settings.transitionMs`. */
 export const TRANSITION_MS = 800;
 
 export interface SceneLayerOptions {
+  /** Fixes the crossfade length; by default it follows the state's `settings.transitionMs`. */
   transitionMs?: number;
   /** How long `prepare()` (and loading the module) may take before the scene is shown anyway. */
   prepareTimeoutMs?: number;
@@ -48,7 +49,7 @@ interface Preparing {
  */
 export class SceneLayer {
   readonly #container: HTMLElement;
-  readonly #transitionMs: number;
+  readonly #transitionMs: number | undefined;
   readonly #prepareTimeoutMs: number;
   readonly #log: (message: string, error?: unknown) => void;
 
@@ -66,7 +67,7 @@ export class SceneLayer {
 
   constructor(container: HTMLElement, options: SceneLayerOptions = {}) {
     this.#container = container;
-    this.#transitionMs = options.transitionMs ?? TRANSITION_MS;
+    this.#transitionMs = options.transitionMs;
     this.#prepareTimeoutMs = options.prepareTimeoutMs ?? 10_000;
     this.#log = options.log ?? ((message, error) => console.error(message, error ?? ""));
   }
@@ -87,6 +88,10 @@ export class SceneLayer {
       if (mounted) this.#assign(mounted);
     }
     this.#reconcile();
+  }
+
+  #fadeMs(): number {
+    return this.#transitionMs ?? this.#state?.settings?.transitionMs ?? TRANSITION_MS;
   }
 
   /** Removes every scene. */
@@ -184,7 +189,7 @@ export class SceneLayer {
     mounted.animation?.cancel();
     mounted.wrapper.style.opacity = String(to);
     mounted.animation = mounted.wrapper.animate([{ opacity: from }, { opacity: to }], {
-      duration: this.#transitionMs * Math.abs(to - from),
+      duration: this.#fadeMs() * Math.abs(to - from),
       easing: "ease-in-out",
     });
     return mounted.animation;

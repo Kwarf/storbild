@@ -157,6 +157,7 @@ export function reconcilePlugins(state: ShowState, catalog: PluginCatalog): Show
       ...(plugin.version !== undefined && { version: plugin.version }),
       ...(plugin.error !== undefined && { error: plugin.error }),
       ...(plugin.module !== undefined && { module: plugin.module }),
+      ...(plugin.adminModule !== undefined && { adminModule: plugin.adminModule }),
       settings: normalized.ok ? normalized.value : settings,
       state: stored?.state ?? null,
       types: Object.fromEntries(

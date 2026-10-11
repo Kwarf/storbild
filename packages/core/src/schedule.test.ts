@@ -118,6 +118,20 @@ describe("settle: durations", () => {
     });
     expect(durations(s.state)).toEqual([8_000]);
   });
+
+  test("the show's default duration applies and re-anchors the rotation when it changes", () => {
+    const s = setup();
+    const overlay = s.run({
+      type: "instance.create",
+      payload: { plugin: "markdown", type: "counter", name: "N", config: { count: 1 } },
+    });
+    const a = s.add(s.scene("throw"));
+    s.add(overlay);
+    s.at(5_000).run({ type: "settings.update", payload: { defaultDurationMs: 8_000 } });
+    expect(durations(s.state)).toEqual([8_000, 8_000]);
+    // The item on air keeps playing with its new length.
+    expect(s.state.timeline.main).toMatchObject({ itemId: a, startedAt: 0, endsAt: 8_000 });
+  });
 });
 
 describe("settle: the rotation across edits", () => {

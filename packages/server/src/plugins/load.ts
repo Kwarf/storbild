@@ -10,16 +10,26 @@ import {
   pluginDefinitionSchema,
 } from "@storbild/core";
 import { z } from "zod";
-import { bundleViewer, importDefinition, type ModuleFiles } from "./bundle.ts";
+import { bundleBrowser, importDefinition, type ModuleFiles } from "./bundle.ts";
 
 export type Log = (message: string) => void;
+
+/** A JSON Schema document, as `z.toJSONSchema` makes it. */
+export type JsonSchema = Record<string, unknown>;
+
+/** The JSON Schemas that drive a plugin's admin forms (ADR 0010). */
+export interface PluginSchemas {
+  settings?: JsonSchema;
+  types: Record<string, JsonSchema>;
+}
 
 /** A plugin as loaded: its catalog entry, and its code when it is usable. */
 export interface PluginModule {
   plugin: LoadedPlugin;
   definition?: PluginDefinitionShape;
-  /** The bundled viewer module, served at `/plugins/<id>/<version>/`. */
-  viewer?: ModuleFiles;
+  /** The bundled browser modules (`viewer.js`, `admin.js`), served at `/plugins/<id>/<version>/`. */
+  files?: ModuleFiles;
+  schemas?: PluginSchemas;
 }
 
 /**
@@ -43,7 +53,7 @@ const packageSchema = z.object({
   version: z.string().optional(),
   main: z.string().optional(),
   exports: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
-  storbild: z.object({ viewer: z.string().optional() }).optional(),
+  storbild: z.object({ viewer: z.string().optional(), admin: z.string().optional() }).optional(),
 });
 
 /** The package's `exports["."]` (string, or `import`/`default` condition), or `main`. */
@@ -61,10 +71,10 @@ function definitionEntry(pkg: z.infer<typeof packageSchema>): string | undefined
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** Checks that a schema can drive a generated admin form. */
-function checkJsonSchema(schema: z.ZodType, what: string) {
+/** Converts a schema for the admin's generated forms; one that can't convert is an error. */
+function toJsonSchema(schema: z.ZodType, what: string): JsonSchema {
   try {
-    z.toJSONSchema(schema, { io: "input" });
+    return z.toJSONSchema(schema, { io: "input" }) as JsonSchema;
   } catch (error) {
     throw new Error(`${what} cannot be converted to JSON Schema: ${errorMessage(error)}`);
   }
@@ -120,11 +130,12 @@ export async function loadPlugin(
   }
 
   const types: Record<string, LoadedType> = {};
-  let viewer: ModuleFiles | undefined;
+  const schemas: PluginSchemas = { types: {} };
+  const files: ModuleFiles = new Map();
   try {
-    if (def.settings) checkJsonSchema(def.settings, "settings");
+    if (def.settings) schemas.settings = toJsonSchema(def.settings, "settings");
     for (const [name, type] of Object.entries(def.types)) {
-      checkJsonSchema(type.config, `config of type ${name}`);
+      schemas.types[name] = toJsonSchema(type.config, `config of type ${name}`);
       const { configVersion, migrate, duration, ...info } = type;
       types[name] = {
         ...info,
@@ -133,22 +144,32 @@ export async function loadPlugin(
         ...(duration && { duration: duration as Duration }),
       };
     }
-    if (pkg.storbild?.viewer) viewer = await bundleViewer(join(dir, pkg.storbild.viewer));
+    for (const name of ["viewer", "admin"] as const) {
+      const entry = pkg.storbild?.[name];
+      if (!entry) continue;
+      for (const [path, file] of await bundleBrowser(join(dir, entry), name)) files.set(path, file);
+    }
   } catch (error) {
     return failed("error", errorMessage(error));
   }
 
+  const url = (name: string) =>
+    files.has(`${name}.js`) ? `/plugins/${id}/${version}/${name}.js` : undefined;
+  const module = url("viewer");
+  const adminModule = url("admin");
   return {
     plugin: {
       id,
       version,
       status: "ok",
-      ...(viewer && { module: `/plugins/${id}/${version}/viewer.js` }),
+      ...(module && { module }),
+      ...(adminModule && { adminModule }),
       ...(def.settings && { settings: def.settings }),
       types,
     },
     definition: def,
-    ...(viewer && { viewer }),
+    schemas,
+    ...(files.size > 0 && { files }),
   };
 }
 

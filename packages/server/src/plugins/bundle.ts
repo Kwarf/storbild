@@ -67,15 +67,19 @@ export async function importDefinition(entry: string, cacheDir: string): Promise
   return ((await import(file)) as { default?: unknown }).default;
 }
 
-/** Bundles a plugin's viewer module for the browser, with the host modules left external. */
-export async function bundleViewer(entry: string): Promise<ModuleFiles> {
+/**
+ * Bundles one of a plugin's browser modules (`viewer` or `admin`) with the host modules left
+ * external. The entry is `<name>.js`; chunk names are content hashes, so the files of both
+ * modules can be served from one map.
+ */
+export async function bundleBrowser(entry: string, name: string): Promise<ModuleFiles> {
   const result = await Bun.build({
     entrypoints: [entry],
     target: "browser",
     format: "esm",
     splitting: true,
     external: pluginExternals,
-    naming: { entry: "viewer.[ext]", chunk: "chunk-[hash].[ext]", asset: "asset-[hash].[ext]" },
+    naming: { entry: `${name}.[ext]`, chunk: "chunk-[hash].[ext]", asset: "asset-[hash].[ext]" },
     throw: false,
   });
   if (!result.success) throw new Error(logsOf(result));
@@ -99,7 +103,7 @@ function exportTarget(value: unknown): string | undefined {
 }
 
 /**
- * Builds lit and its entry points, Zod, and the SDK for the browser. Each is a separate build
+ * Builds lit and its entry points, Zod, and the SDK's browser subpaths. Each is a separate build
  * that keeps the others external, so the browser loads one copy of each via the import map.
  * Lit's entry points share chunks, so there is a single lit-html.
  */
@@ -149,7 +153,11 @@ async function buildVendor(): Promise<Vendor> {
   await build(
     "plugin-sdk",
     join(sdkDir, "src"),
-    { "@storbild/plugin-sdk": "index.ts", "@storbild/plugin-sdk/viewer": "viewer.ts" },
+    {
+      "@storbild/plugin-sdk": "index.ts",
+      "@storbild/plugin-sdk/viewer": "viewer.ts",
+      "@storbild/plugin-sdk/admin": "admin.ts",
+    },
     ["lit", "lit/*", "zod"],
   );
 

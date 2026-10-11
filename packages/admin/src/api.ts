@@ -1,4 +1,5 @@
-import type { Command } from "@storbild/core";
+import type { Command, Issue } from "@storbild/core";
+import type { JsonSchema } from "@storbild/plugin-sdk/admin";
 // biome-ignore lint/style/noRestrictedImports: a type-only import, erased from the bundle.
 import type { AdminApp } from "@storbild/server";
 import { hc } from "hono/client";
@@ -17,10 +18,16 @@ export class CommandFailed extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Validation issues of a plugin config or settings, by path (422). */
+    readonly issues: Issue[] = [],
   ) {
     super(message);
   }
 }
+
+/** The text to show for a failed action. */
+export const errorText = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
 
 /** Sends a command. Throws `CommandFailed` with a readable message if it is refused. */
 export async function send(
@@ -38,6 +45,25 @@ export async function send(
     toLogin();
     throw new CommandFailed(401, "Your session has expired.");
   }
-  const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-  throw new CommandFailed(res.status, body.message ?? body.error ?? `Failed (${res.status}).`);
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    error?: string;
+    issues?: Issue[];
+  };
+  throw new CommandFailed(
+    res.status,
+    body.message ?? body.error ?? `Failed (${res.status}).`,
+    res.status === 422 ? (body.issues ?? []) : [],
+  );
+}
+
+/** The JSON Schemas of each usable plugin's settings and instance types (ADR 0010). */
+export type Schemas = Record<string, { settings?: JsonSchema; types: Record<string, JsonSchema> }>;
+
+/** Fetches the plugins' schemas; they change only when the server restarts. */
+export async function fetchSchemas(): Promise<Schemas> {
+  const res = await api.api.schemas.$get();
+  if ((res.status as number) === 401) toLogin();
+  if (!res.ok) throw new Error(`Failed to load plugin schemas (${res.status}).`);
+  return (await res.json()) as Schemas;
 }

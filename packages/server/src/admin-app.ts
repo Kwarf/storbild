@@ -12,6 +12,7 @@ import {
   type SessionStore,
   safeEqual,
 } from "./auth.ts";
+import type { PluginSchemas } from "./plugins/load.ts";
 import { createModuleRoutes, type ModuleRegistry } from "./plugins/routes.ts";
 import { type StreamOptions, streamState } from "./sse.ts";
 import { RevisionConflictError, type StateHub } from "./state-hub.ts";
@@ -36,6 +37,8 @@ export interface AdminAppDeps {
   bundle?: AdminBundle;
   /** Handles plugin routes under `/api/plugins/<id>/`. */
   plugins?: { handle(id: string, request: Request): Promise<Response | undefined> };
+  /** The JSON Schemas of each usable plugin's settings and types, for generated forms. */
+  schemas?: Record<string, PluginSchemas>;
 }
 
 /**
@@ -51,7 +54,16 @@ interface Env {
  * under `/api/` needs a session (DESIGN.md §8.1, ADR 0007). Bundles, fonts and plugin modules
  * are public, as they are on the viewer app.
  */
-export function createAdminApp({ hub, now, auth, stream, modules, bundle, plugins }: AdminAppDeps) {
+export function createAdminApp({
+  hub,
+  now,
+  auth,
+  stream,
+  modules,
+  bundle,
+  plugins,
+  schemas = {},
+}: AdminAppDeps) {
   const { sessions, limiter } = auth;
   const secure = new URL(auth.publicUrl).protocol === "https:";
   const publicOrigin = new URL(auth.publicUrl).origin;
@@ -109,85 +121,94 @@ export function createAdminApp({ hub, now, auth, stream, modules, bundle, plugin
     }
   }
 
-  return app
-    .get("/login", (c) => (hasSession(c) ? c.redirect("/") : login(c, 200)))
-    .post("/login", async (c) => {
-      const client = clientOf(
-        c.req.raw,
-        (c.env as Env["Bindings"] | undefined)?.requestIP?.(c.req.raw)?.address,
-      );
-      const wait = limiter.retryAfter(client);
-      if (wait > 0) {
-        const minutes = Math.ceil(wait / 60_000);
-        c.header("Retry-After", String(Math.ceil(wait / 1000)));
-        return login(
-          c,
-          429,
-          undefined,
-          `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+  return (
+    app
+      .get("/login", (c) => (hasSession(c) ? c.redirect("/") : login(c, 200)))
+      .post("/login", async (c) => {
+        const client = clientOf(
+          c.req.raw,
+          (c.env as Env["Bindings"] | undefined)?.requestIP?.(c.req.raw)?.address,
         );
-      }
-      const form = await c.req.parseBody();
-      const username = typeof form.username === "string" ? form.username : "";
-      const password = typeof form.password === "string" ? form.password : "";
-      // Both checks always run, so the response time doesn't reveal a valid username.
-      const userOk = safeEqual(username, auth.username);
-      const passwordOk = await Bun.password.verify(password, auth.passwordHash).catch(() => false);
-      if (!userOk || !passwordOk) {
-        limiter.fail(client);
-        return login(c, 401, username, "Wrong username or password.");
-      }
-      limiter.succeed(client);
-      setSessionCookie(c, sessions.create());
-      return c.redirect("/", 303);
-    })
-    .post("/logout", (c) => {
-      sessions.delete(getCookie(c, cookie));
-      deleteCookie(c, cookie, { path: "/", secure });
-      return c.redirect("/login", 303);
-    })
-    .all("/api/plugins/:id/*", async (c) => {
-      const id = c.req.param("id");
-      // The plugin sees paths relative to its prefix.
-      const url = new URL(c.req.url);
-      url.pathname = url.pathname.slice(`/api/plugins/${id}`.length) || "/";
-      const response = await plugins?.handle(id, new Request(url.href, c.req.raw));
-      return response ?? c.json({ error: "not_found" }, 404);
-    })
-    .get("/api/time", (c) => {
-      c.header("Cache-Control", "no-store");
-      return c.json({ now: now() });
-    })
-    .get("/api/events", (c) => streamState(c, hub, stream))
-    .post(
-      "/api/commands",
-      zValidator("json", commandRequestSchema, (result, c) => {
-        if (!result.success) {
-          return c.json({ error: "invalid_command", issues: result.error.issues }, 400);
+        const wait = limiter.retryAfter(client);
+        if (wait > 0) {
+          const minutes = Math.ceil(wait / 60_000);
+          c.header("Retry-After", String(Math.ceil(wait / 1000)));
+          return login(
+            c,
+            429,
+            undefined,
+            `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+          );
         }
-      }),
-      (c) => {
-        const { expectedRevision, ...command } = c.req.valid("json");
-        try {
-          return c.json(hub.dispatch(command as Command, expectedRevision), 200);
-        } catch (error) {
-          if (error instanceof RevisionConflictError) {
-            return c.json({ error: "revision_conflict", revision: error.revision }, 409);
-          }
-          if (error instanceof CommandError) {
-            return c.json(
-              {
-                error: error.code,
-                message: error.message,
-                ...(error.issues && { issues: error.issues }),
-              },
-              error.code === "not_found" ? 404 : 422,
-            );
-          }
-          throw error;
+        const form = await c.req.parseBody();
+        const username = typeof form.username === "string" ? form.username : "";
+        const password = typeof form.password === "string" ? form.password : "";
+        // Both checks always run, so the response time doesn't reveal a valid username.
+        const userOk = safeEqual(username, auth.username);
+        const passwordOk = await Bun.password
+          .verify(password, auth.passwordHash)
+          .catch(() => false);
+        if (!userOk || !passwordOk) {
+          limiter.fail(client);
+          return login(c, 401, username, "Wrong username or password.");
         }
-      },
-    );
+        limiter.succeed(client);
+        setSessionCookie(c, sessions.create());
+        return c.redirect("/", 303);
+      })
+      .post("/logout", (c) => {
+        sessions.delete(getCookie(c, cookie));
+        deleteCookie(c, cookie, { path: "/", secure });
+        return c.redirect("/login", 303);
+      })
+      .all("/api/plugins/:id/*", async (c) => {
+        const id = c.req.param("id");
+        // The plugin sees paths relative to its prefix.
+        const url = new URL(c.req.url);
+        url.pathname = url.pathname.slice(`/api/plugins/${id}`.length) || "/";
+        const response = await plugins?.handle(id, new Request(url.href, c.req.raw));
+        return response ?? c.json({ error: "not_found" }, 404);
+      })
+      // Plugins only change on restart, but a reload must not keep a stale copy.
+      .get("/api/schemas", (c) => {
+        c.header("Cache-Control", "no-store");
+        return c.json(schemas);
+      })
+      .get("/api/time", (c) => {
+        c.header("Cache-Control", "no-store");
+        return c.json({ now: now() });
+      })
+      .get("/api/events", (c) => streamState(c, hub, stream))
+      .post(
+        "/api/commands",
+        zValidator("json", commandRequestSchema, (result, c) => {
+          if (!result.success) {
+            return c.json({ error: "invalid_command", issues: result.error.issues }, 400);
+          }
+        }),
+        (c) => {
+          const { expectedRevision, ...command } = c.req.valid("json");
+          try {
+            return c.json(hub.dispatch(command as Command, expectedRevision), 200);
+          } catch (error) {
+            if (error instanceof RevisionConflictError) {
+              return c.json({ error: "revision_conflict", revision: error.revision }, 409);
+            }
+            if (error instanceof CommandError) {
+              return c.json(
+                {
+                  error: error.code,
+                  message: error.message,
+                  ...(error.issues && { issues: error.issues }),
+                },
+                error.code === "not_found" ? 404 : 422,
+              );
+            }
+            throw error;
+          }
+        },
+      )
+  );
 }
 
 /** The admin app's type, for the admin's typed `hc` client. */

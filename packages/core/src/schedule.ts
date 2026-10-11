@@ -4,7 +4,6 @@ import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog } from "./schema/plugin.ts";
 import type { ShowState } from "./schema/state.ts";
 import {
-  DEFAULT_DURATION_MS,
   inWindow,
   isPlayableScene,
   itemDuration,
@@ -34,13 +33,14 @@ export function settle(before: ShowState, after: ShowState, ctx: SettleContext):
 
 /**
  * Sets every item's `resolvedDurationMs`: its override, else its type's `duration(config,
- * settings)`, else the default. A type whose `duration` throws or returns something other than
+ * settings)`, else the show's default. A type whose `duration` throws or returns something other than
  * a positive number gets the default.
  */
 export function resolveDurations(state: ShowState, catalog: PluginCatalog): ShowState {
   let changed = false;
   const items = state.playlist.items.map((item) => {
-    const resolved = item.durationMs ?? typeDuration(state, catalog, item) ?? DEFAULT_DURATION_MS;
+    const resolved =
+      item.durationMs ?? typeDuration(state, catalog, item) ?? state.settings.defaultDurationMs;
     if (item.resolvedDurationMs === resolved) return item;
     changed = true;
     return { ...item, resolvedDurationMs: resolved };

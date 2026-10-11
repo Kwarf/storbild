@@ -1,9 +1,10 @@
 import type { PlaylistItem } from "./schema/playlist.ts";
+import { defaultShowSettings } from "./schema/settings.ts";
 import type { ShowState } from "./schema/state.ts";
 import type { Timeline, TimelineMain } from "./schema/timeline.ts";
 
-/** How long an item runs when neither it nor its type says (DESIGN.md §11). */
-export const DEFAULT_DURATION_MS = 15_000;
+/** How long an item runs before the scheduler has resolved its duration. */
+export const DEFAULT_DURATION_MS = defaultShowSettings.defaultDurationMs;
 
 /**
  * Whether an instance can be shown as a scene: it exists, isn't broken, and is of a scene type.

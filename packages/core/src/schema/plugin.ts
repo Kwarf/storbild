@@ -49,6 +49,8 @@ export const pluginEntrySchema = z.object({
   state: jsonSchema,
   /** URL of the plugin's browser module, which registers its custom elements. */
   module: z.string().optional(),
+  /** URL of the plugin's admin module, which registers its custom editors (ADR 0010). */
+  adminModule: z.string().optional(),
   types: z.record(z.string(), pluginTypeInfoSchema),
 });
 export type PluginEntry = z.infer<typeof pluginEntrySchema>;
@@ -103,6 +105,7 @@ export interface LoadedPlugin {
   status: Exclude<PluginStatus, "missing">;
   error?: string;
   module?: string;
+  adminModule?: string;
   settings?: z.ZodType;
   types?: Record<string, LoadedType>;
 }

@@ -34,3 +34,11 @@ class ProbeScene extends StorbildScene<Config> {
 }
 
 customElements.define("probe-scene", ProbeScene);
+
+class ProbeCard extends StorbildScene<PluginConfig<typeof plugin, "card">> {
+  override render() {
+    return html`<p class="probe-card">${this.config.text}</p>`;
+  }
+}
+
+customElements.define("probe-card", ProbeCard);

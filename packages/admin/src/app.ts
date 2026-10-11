@@ -2,9 +2,13 @@ import type { ShowState } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { ClockSync, hasStaleModules, SyncClient, type Timers } from "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
-import { toLogin } from "./api.ts";
+import { fetchSchemas, type Schemas, toLogin } from "./api.ts";
+import "./library-page.ts";
 import "./live-panel.ts";
+import "./plugins-page.ts";
+import "./rotation-page.ts";
 import { type Section, sections } from "./sections.ts";
+import "./settings-page.ts";
 import "./strip.ts";
 import { controls } from "./styles.ts";
 
@@ -49,6 +53,7 @@ export class Admin extends LitElement {
     connected: { state: true },
     path: { state: true },
     theme: { state: true },
+    schemas: { state: true },
   };
 
   static override styles = [
@@ -152,6 +157,8 @@ export class Admin extends LitElement {
   declare connected: boolean;
   declare path: string;
   declare theme: Theme;
+  /** The plugins' JSON Schemas for generated forms; reloaded on every (re)connect. */
+  declare schemas: Schemas | undefined;
 
   readonly clock = new ClockSync({ url: "/api/time", fetch: fetchApi, localNow, timers });
   readonly sync = new SyncClient({
@@ -178,7 +185,16 @@ export class Admin extends LitElement {
       if (hasStaleModules(state)) location.reload();
       else this.state = state;
     },
-    onConnect: () => void this.clock.sync(),
+    onConnect: () => {
+      void this.clock.sync();
+      // The server may have restarted with other plugins.
+      fetchSchemas().then(
+        (schemas) => {
+          this.schemas = schemas;
+        },
+        (error: unknown) => console.error(error),
+      );
+    },
   });
   readonly ctx: ViewerContext = {
     serverNow: this.clock.serverNow,
@@ -253,16 +269,32 @@ export class Admin extends LitElement {
       </nav>
       <main>
         <sb-strip .state=${this.state} .ctx=${this.ctx}></sb-strip>
-        ${
-          current === undefined || !("milestone" in current)
-            ? html`<sb-live-panel .state=${this.state} .ctx=${this.ctx}></sb-live-panel>`
-            : html`<div class="placeholder">
-                <h1>${current.label}</h1>
-                <p class="muted">This page arrives in ${current.milestone}.</p>
-              </div>`
-        }
+        ${this.#page(current)}
       </main>
     `;
+  }
+
+  #page(current: Section | undefined) {
+    const { state, ctx, schemas } = this;
+    if (current === undefined)
+      return html`<sb-live-panel .state=${state} .ctx=${ctx}></sb-live-panel>`;
+    switch (current.path) {
+      case "/live":
+        return html`<sb-live-panel .state=${state} .ctx=${ctx}></sb-live-panel>`;
+      case "/rotation":
+        return html`<sb-rotation-page .state=${state} .ctx=${ctx}></sb-rotation-page>`;
+      case "/library":
+        return html`<sb-library-page .state=${state} .ctx=${ctx} .schemas=${schemas}></sb-library-page>`;
+      case "/plugins":
+        return html`<sb-plugins-page .state=${state} .schemas=${schemas}></sb-plugins-page>`;
+      case "/settings":
+        return html`<sb-settings-page .state=${state}></sb-settings-page>`;
+      default:
+        return html`<div class="placeholder">
+          <h1>${current.label}</h1>
+          <p class="muted">This page arrives in ${"milestone" in current ? current.milestone : "a later milestone"}.</p>
+        </div>`;
+    }
   }
 
   #navigate(event: MouseEvent, path: string) {

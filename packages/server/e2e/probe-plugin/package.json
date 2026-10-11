@@ -7,7 +7,8 @@
     ".": "./src/plugin.ts"
   },
   "storbild": {
-    "viewer": "./src/viewer.ts"
+    "viewer": "./src/viewer.ts",
+    "admin": "./src/admin.ts"
   },
   "peerDependencies": {
     "@storbild/plugin-sdk": "*",

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { durationMsSchema, epochMsSchema, idSchema } from "./schema/common.ts";
 import { instanceBackgroundSchema } from "./schema/instance.ts";
+import { showSettingsSchema } from "./schema/settings.ts";
 import { interruptBelowSchema } from "./schema/timeline.ts";
 
 function command<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -59,6 +60,9 @@ export const commandSchema = z.discriminatedUnion("type", [
   command("playlist.reorder", z.object({ itemIds: z.array(idSchema) })),
   /** Replaces the plugin's settings whole; they are validated by its settings schema. */
   command("plugin.updateSettings", z.object({ plugin: z.string().min(1), settings: z.json() })),
+  /** Deletes a `missing` plugin's stored data and its instances for good. */
+  command("plugin.remove", z.object({ plugin: z.string().min(1) })),
+  command("settings.update", showSettingsSchema.partial()),
   // Live control (ADR 0006). Without `durationMs`, a take or interrupt holds until cleared.
   command("live.take", z.object({ instanceId: idSchema, durationMs: durationMsSchema.optional() })),
   command(

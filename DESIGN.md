@@ -91,7 +91,8 @@ storbild/
 │   │                          # patch helpers, clock-offset math. No I/O. Used by
 │   │                          # server AND viewer.
 │   ├── plugin-sdk/            # published as @storbild/plugin-sdk: definePlugin, types,
-│   │                          # Lit base classes, admin form components, z re-export
+│   │                          # field helpers, Lit base classes, admin form components,
+│   │                          # z re-export
 │   ├── server/                # Bun + Hono: apps, commands, persistence, scheduler,
 │   │                          # plugin host, SSE, assets
 │   ├── viewer/                # Lit viewer app (compositor, sync client)
@@ -157,7 +158,7 @@ interface PlaylistItem {
 ```
 
 - The rotation loops through items that are enabled, not broken, and inside their time window at the moment they would start. A started item plays to its end.
-- **Duration is always determined on the server.** It is the item override, or the instance type's `duration(config, settings)`, or a global default (15 s). The resolved value is stored in state as `resolvedDurationMs`, so the viewer never needs plugin server code. Scenes cannot end themselves from the client.
+- **Duration is always determined on the server.** It is the item override, or the instance type's `duration(config, settings)`, or the show's default duration (`settings.defaultDurationMs`, 15 s unless changed; [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md)). The resolved value is stored in state as `resolvedDurationMs`, so the viewer never needs plugin server code. Scenes cannot end themselves from the client.
 - Editing the playlist never restarts the show: the item on air keeps playing if it is still eligible, otherwise the rotation continues with the item after it ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
 ### 4.3 Schedule cues
@@ -290,6 +291,7 @@ interface ShowState {
   live: Live;                  // input: takes, interrupts, blackout
   timeline: Timeline;          // output: the server's resolution at the latest revision
   assets: Record<string, AssetMeta>;
+  settings: { defaultDurationMs: number; transitionMs: number };   // show-wide defaults
 }
 ```
 
@@ -301,6 +303,7 @@ interface PluginEntry {
   settings: unknown;
   state: unknown;
   module?: string;             // versioned viewer module URL
+  adminModule?: string;        // versioned admin module URL (custom editors)
   types: Record<string, { kind: "scene" | "overlay"; label: string; viewer: string; /* … */ }>;
 }
 ```
@@ -339,7 +342,8 @@ The viewer stream receives the full `ShowState`. Each plugin entry carries what 
 instance.create | instance.update | instance.delete
 playlist.addItem | playlist.updateItem | playlist.removeItem | playlist.reorder
 cue.create | cue.update | cue.delete
-plugin.updateSettings
+plugin.updateSettings | plugin.remove
+settings.update
 overlay.place | overlay.update | overlay.remove
 theme.create | theme.update | theme.delete | theme.activate
 live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
@@ -347,7 +351,7 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
-M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md)).
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -360,7 +364,7 @@ From M2, instance config and plugin settings are validated by the plugin's schem
 Plugins can live in standalone repositories. They depend only on `@storbild/plugin-sdk`.
 
 ```ts
-import { definePlugin, z } from "@storbild/plugin-sdk";
+import { definePlugin, fields, z } from "@storbild/plugin-sdk";
 
 export default definePlugin({
   id: "markdown",
@@ -371,8 +375,8 @@ export default definePlugin({
     text: {
       kind: "scene",
       label: "Markdown text",
-      config: z.object({ title: z.string().optional(), content: z.string() }),
-      duration: () => 15_000,
+      config: z.object({ title: z.string().optional(), content: fields.markdown() }),
+      duration: () => 15_000,              // optional; else the show's default
       viewer: "sb-markdown-scene",
       // editor: "sb-markdown-editor",   // optional custom admin element
       // background: "theme" | "own",    // default "theme"
@@ -385,7 +389,7 @@ export default definePlugin({
 
 `definePlugin()` infers types from the Zod schemas. The server part's settings and instances are typed automatically, and viewer elements get theirs with `PluginConfig<typeof plugin, "text">` and `PluginSettings<typeof plugin>`.
 
-A plugin package's `exports["."]` is the definition module above, which only the server loads. Its browser entry, which registers the custom elements, is named in `package.json` as `"storbild": { "viewer": "./src/viewer.ts" }`. The SDK is split the same way: `@storbild/plugin-sdk` (definition, `z`, types), `@storbild/plugin-sdk/viewer` (Lit base classes) and `@storbild/plugin-sdk/build` (build preset).
+A plugin package's `exports["."]` is the definition module above, which only the server loads. Its browser entry, which registers the viewer elements, is named in `package.json` as `"storbild": { "viewer": "./src/viewer.ts" }`. An optional `"admin": "./src/admin.ts"` entry registers custom editors and is loaded only by the admin. The SDK is split the same way: `@storbild/plugin-sdk` (definition, `z`, `fields`, types), `@storbild/plugin-sdk/viewer` (Lit base classes), `@storbild/plugin-sdk/admin` (form components) and `@storbild/plugin-sdk/build` (build preset).
 
 ### 6.2 A plugin has three faces
 
@@ -393,7 +397,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
   - Lifecycle: `prepare()` (preload; awaited before the scene is used), `enter(at)`, `exit(at)`, `dispose()`.
   - Scenes don't implement transitions. The compositor owns them.
-- **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components. A plugin may provide a custom editor element built from the same components (text, markdown, number, colour, duration, datetime, asset picker, list), so it looks native.
+- **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components, `<sb-form>` and `<sb-field>`. The `fields` helpers (`markdown`, `color`, `duration`, `datetime`) tag a schema with the widget it needs. A plugin may provide a custom editor element in its admin module, built from the same components (text, markdown, number, colour, duration, datetime, select, list, and the asset picker from M6b), so it looks native ([ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md)).
 - **Server (optional):** `server(ctx)` runs when the plugin is loaded. Its context offers:
   - `ctx.settings()` and `ctx.onSettingsChange(cb)`
   - `ctx.instances(type?)` and `ctx.onInstancesChange(cb)`
@@ -435,7 +439,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   3. overlay slots
   4. interrupt, beneath which the layers below are covered with the theme background (`hide`, the default), dimmed (`dim`) or left visible (`show`) ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md))
   5. blackout
-- **Transitions.** Owned by the compositor. The first version has a crossfade (800 ms); more can come later. At most two scenes are visible at once. Scenes are keyed by instance, so an instance that stays on air is updated in place, never remounted.
+- **Transitions.** Owned by the compositor. The first version has a crossfade, 800 ms unless changed in the show's settings (`settings.transitionMs`); more can come later. At most two scenes are visible at once. Scenes are keyed by instance, so an instance that stays on air is updated in place, never remounted.
 - **Prefetch.** When `timeline.next` appears, the viewer loads the plugin module, creates the element and awaits `prepare()` (image decode, fonts) before `startsAt`.
 - **Robustness:**
   - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
@@ -471,7 +475,7 @@ Sync client, bundling and failure handling are specified in [ADR 0005](docs/deci
 - **Overlays:** a slot diagram plus the placement list.
 - **Theme:** a theme editor with live preview, and activation.
 - **Plugins:** status and settings per plugin.
-- **Settings:** global defaults (default duration, transition length).
+- **Settings:** global defaults (default duration, transition length), stored in state.
 
 ### 8.3 Visual design
 
@@ -610,6 +614,8 @@ Sessions, the cookie, rate limiting, the origin check, which routes are public, 
 
 **Deferred:** the asset store, the Schedule page and quick announce (M6b).
 
+Show settings in state, the JSON Schema endpoint, the `fields` helpers, the SDK's admin subpath, custom editor modules, `plugin.remove` and the pages are specified in [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md).
+
 ### M6b — Assets, schedule and quick announce
 
 **Depends on:** M6a.
@@ -681,6 +687,5 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- The default rotation duration is 15 s ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)) and the transition length 800 ms ([ADR 0005](docs/decisions/0005-viewer.md)), until M6a makes them settings.
 - Whether quick-announce messages should be auto-deleted after use, or kept in the library.
 - The exact upstream event format for `now-playing` (to be defined when the music service is known).

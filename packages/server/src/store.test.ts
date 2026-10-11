@@ -78,6 +78,7 @@ function fullState(): ShowState {
       main: { instanceId: "i1", itemId: "p1", startedAt: 10 },
       blackout: true,
     },
+    settings: { defaultDurationMs: 20_000, transitionMs: 0 },
   };
 }
 
@@ -124,13 +125,14 @@ describe("persistence", () => {
     expect(logged[0]).toContain("instance i1");
   });
 
-  test("a database without live control or an anchor item loads the defaults quietly", () => {
+  test("a database without live control, an anchor item or settings loads the defaults quietly", () => {
     const db = openDatabase(":memory:");
     saveState(db, fullState());
-    db.run(`DELETE FROM meta WHERE key IN ('live', 'playlist.anchorItemId')`);
+    db.run(`DELETE FROM meta WHERE key IN ('live', 'playlist.anchorItemId', 'settings')`);
     const logged: string[] = [];
     const loaded = loadState(db, (message) => logged.push(message));
     expect(loaded?.live).toEqual({ blackout: false });
+    expect(loaded?.settings).toEqual({ defaultDurationMs: 15_000, transitionMs: 800 });
     expect(loaded?.playlist.anchorItemId).toBeUndefined();
     expect(logged).toEqual([]);
   });

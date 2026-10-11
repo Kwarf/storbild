@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type Command, commandSchema, type HostCommand } from "./commands.ts";
 import { reconcilePlugins } from "./plugins.ts";
 import { applyCommand, CommandError } from "./reducer.ts";
+import type { LoadedPlugin, LoadedType, PluginCatalog } from "./schema/plugin.ts";
 import { createInitialState, type ShowState } from "./schema/state.ts";
 import { testCatalog } from "./test/catalog.ts";
 
@@ -325,5 +326,59 @@ describe("applyCommand", () => {
   test("live.clearInterrupt without an interrupt is invalid", () => {
     const s = setup();
     expect(errorOf(() => s.run({ type: "live.clearInterrupt", payload: {} })).code).toBe("invalid");
+  });
+
+  test("settings.update merges into the show settings and validates them", () => {
+    const s = setup();
+    expect(s.state.settings).toEqual({ defaultDurationMs: 15_000, transitionMs: 800 });
+    s.run({ type: "settings.update", payload: { transitionMs: 0 } });
+    expect(s.state.settings).toEqual({ defaultDurationMs: 15_000, transitionMs: 0 });
+    const invalid = commandSchema.safeParse({
+      type: "settings.update",
+      payload: { defaultDurationMs: 0 },
+    });
+    expect(invalid.success).toBe(false);
+  });
+
+  test("plugin.remove deletes a missing plugin and its instances, and nothing else", () => {
+    const s = setup();
+    const id = s.run({ type: "instance.create", payload: markdown }) as string;
+    s.run({ type: "playlist.addItem", payload: { instanceId: id } });
+    const remove = () => s.run({ type: "plugin.remove", payload: { plugin: "markdown" } });
+    expect(errorOf(remove).code).toBe("invalid");
+    expect(errorOf(() => s.run({ type: "plugin.remove", payload: { plugin: "nope" } })).code).toBe(
+      "not_found",
+    );
+
+    const { markdown: _, ...rest } = testCatalog;
+    let state = reconcilePlugins(s.state, rest);
+    expect(state.plugins.markdown?.status).toBe("missing");
+    state = applyCommand(
+      state,
+      { type: "plugin.remove", payload: { plugin: "markdown" } },
+      {
+        ...s.ctx,
+        catalog: rest,
+      },
+    ).state;
+    expect(state.plugins.markdown).toBeUndefined();
+    expect(state.instances).toEqual({});
+    expect(state.playlist.items).toEqual([]);
+  });
+
+  test("instance.create allows only one instance of a singleton type", () => {
+    const markdownPlugin = testCatalog.markdown as LoadedPlugin;
+    const types = markdownPlugin.types as Record<string, LoadedType>;
+    const catalog: PluginCatalog = {
+      markdown: {
+        ...markdownPlugin,
+        types: { ...types, text: { ...(types.text as LoadedType), singleton: true } },
+      },
+    };
+    const ctx = { now: 0, newId: () => "only", catalog };
+    let state = reconcilePlugins(createInitialState(ctx), catalog);
+    state = applyCommand(state, { type: "instance.create", payload: markdown }, ctx).state;
+    const again = () => applyCommand(state, { type: "instance.create", payload: markdown }, ctx);
+    expect(errorOf(again).code).toBe("invalid");
   });
 });

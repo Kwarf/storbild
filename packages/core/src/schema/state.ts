@@ -7,6 +7,7 @@ import { liveSchema } from "./live.ts";
 import { overlayPlacementSchema } from "./overlay.ts";
 import { playlistSchema } from "./playlist.ts";
 import { pluginEntrySchema } from "./plugin.ts";
+import { defaultShowSettings, showSettingsSchema } from "./settings.ts";
 import { type Theme, themeSchema } from "./theme.ts";
 import { type Timeline, timelineSchema } from "./timeline.ts";
 
@@ -22,6 +23,7 @@ export const showStateSchema = z.object({
   live: liveSchema,
   timeline: timelineSchema,
   assets: z.record(z.string(), assetMetaSchema),
+  settings: showSettingsSchema,
 });
 export type ShowState = z.infer<typeof showStateSchema>;
 
@@ -53,5 +55,6 @@ export function createInitialState(ctx: { now: number; newId: () => string }): S
     live: { blackout: false },
     timeline: placeholderTimeline,
     assets: {},
+    settings: defaultShowSettings,
   };
 }
