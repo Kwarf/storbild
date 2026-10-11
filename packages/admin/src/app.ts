@@ -1,12 +1,15 @@
 import type { ShowState } from "@storbild/core";
+import { ASSET_SOURCE_REQUEST, type AssetSourceRequest } from "@storbild/plugin-sdk/admin";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { ClockSync, hasStaleModules, SyncClient, type Timers } from "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
 import { fetchSchemas, type Schemas, toLogin } from "./api.ts";
+import { StateAssetSource } from "./assets.ts";
 import "./library-page.ts";
 import "./live-panel.ts";
 import "./plugins-page.ts";
 import "./rotation-page.ts";
+import "./schedule-page.ts";
 import { type Section, sections } from "./sections.ts";
 import "./settings-page.ts";
 import "./strip.ts";
@@ -183,7 +186,10 @@ export class Admin extends LitElement {
     reload: () => location.reload(),
     onState: (state) => {
       if (hasStaleModules(state)) location.reload();
-      else this.state = state;
+      else {
+        this.state = state;
+        this.assets.update(state);
+      }
     },
     onConnect: () => {
       void this.clock.sync();
@@ -196,9 +202,11 @@ export class Admin extends LitElement {
       );
     },
   });
+  /** Offered to every asset picker on the page, including those in custom editors. */
+  readonly assets = new StateAssetSource();
   readonly ctx: ViewerContext = {
     serverNow: this.clock.serverNow,
-    assetUrl: (assetId) => `/assets/${encodeURIComponent(assetId)}`,
+    assetUrl: (assetId) => this.assets.url(assetId),
   };
 
   readonly #onPopState = () => {
@@ -215,6 +223,9 @@ export class Admin extends LitElement {
     this.theme = storedTheme();
     this.path = sectionAt(location.pathname) ? location.pathname : "/live";
     if (this.path !== location.pathname) history.replaceState(null, "", this.path);
+    this.addEventListener(ASSET_SOURCE_REQUEST, (event) => {
+      (event as AssetSourceRequest).detail.source = this.assets;
+    });
   }
 
   override connectedCallback() {
@@ -283,6 +294,8 @@ export class Admin extends LitElement {
         return html`<sb-live-panel .state=${state} .ctx=${ctx}></sb-live-panel>`;
       case "/rotation":
         return html`<sb-rotation-page .state=${state} .ctx=${ctx}></sb-rotation-page>`;
+      case "/schedule":
+        return html`<sb-schedule-page .state=${state} .ctx=${ctx}></sb-schedule-page>`;
       case "/library":
         return html`<sb-library-page .state=${state} .ctx=${ctx} .schemas=${schemas}></sb-library-page>`;
       case "/plugins":

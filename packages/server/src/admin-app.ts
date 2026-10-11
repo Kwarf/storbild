@@ -2,9 +2,11 @@ import { zValidator } from "@hono/zod-validator";
 import { adminPage, loginPage, shellPaths } from "@storbild/admin";
 import { type Command, CommandError, commandRequestSchema } from "@storbild/core";
 import { type Context, Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { AdminBundle } from "./admin-page.ts";
 import { createBundleRoutes } from "./app-bundle.ts";
+import { type AssetStore, createAssetRoutes, MAX_THUMBNAIL_BYTES } from "./assets.ts";
 import {
   clientOf,
   type LoginLimiter,
@@ -39,6 +41,10 @@ export interface AdminAppDeps {
   plugins?: { handle(id: string, request: Request): Promise<Response | undefined> };
   /** The JSON Schemas of each usable plugin's settings and types, for generated forms. */
   schemas?: Record<string, PluginSchemas>;
+  /** Uploaded files, served here for the preview and stored by `POST /api/assets`. */
+  assets?: AssetStore;
+  /** The largest upload, in bytes. */
+  maxUploadBytes?: number;
 }
 
 /**
@@ -63,6 +69,8 @@ export function createAdminApp({
   bundle,
   plugins,
   schemas = {},
+  assets,
+  maxUploadBytes = 25 * 1024 * 1024,
 }: AdminAppDeps) {
   const { sessions, limiter } = auth;
   const secure = new URL(auth.publicUrl).protocol === "https:";
@@ -94,6 +102,15 @@ export function createAdminApp({
     );
   };
 
+  const tooLarge = (c: Context) =>
+    c.json(
+      {
+        error: "too_large" as const,
+        message: `Files can be at most ${Math.round(maxUploadBytes / (1024 * 1024))} MB.`,
+      },
+      413,
+    );
+
   const app = new Hono<Env>();
   // Browsers send Origin on every state-changing request; a foreign one is a cross-site forgery.
   app.use(async (c, next) => {
@@ -105,6 +122,7 @@ export function createAdminApp({
     await next();
   });
   if (modules) app.route("/", createModuleRoutes(modules));
+  if (assets) app.route("/", createAssetRoutes(assets, { thumbnails: true }));
   if (bundle) {
     app.route("/", createBundleRoutes(bundle));
     const html = adminPage({
@@ -179,6 +197,33 @@ export function createAdminApp({
         return c.json({ now: now() });
       })
       .get("/api/events", (c) => streamState(c, hub, stream))
+      // Multipart: `file`, and optionally `name` and a WebP `thumbnail` made by the admin.
+      .post(
+        "/api/assets",
+        bodyLimit({
+          maxSize: maxUploadBytes + MAX_THUMBNAIL_BYTES + 64 * 1024,
+          onError: tooLarge,
+        }),
+        async (c) => {
+          if (!assets)
+            return c.json({ error: "not_found" as const, message: "no asset store" }, 404);
+          const form = await c.req.formData().catch(() => undefined);
+          const file = form?.get("file");
+          if (!(file instanceof Blob)) {
+            return c.json({ error: "invalid_upload" as const, message: "no file was sent" }, 400);
+          }
+          if (file.size > maxUploadBytes) return tooLarge(c);
+          const name = form?.get("name");
+          const thumbnail = form?.get("thumbnail");
+          const result = await assets.upload(
+            file,
+            typeof name === "string" ? name : file instanceof File ? file.name : "",
+            thumbnail instanceof Blob ? thumbnail : undefined,
+          );
+          if (!result.ok) return c.json({ error: result.error, message: result.message }, 415);
+          return c.json(result.asset, 200);
+        },
+      )
       .post(
         "/api/commands",
         zValidator("json", commandRequestSchema, (result, c) => {

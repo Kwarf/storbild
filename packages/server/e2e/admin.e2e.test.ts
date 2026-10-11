@@ -153,8 +153,9 @@ describe.skipIf(!enabled)("admin", () => {
   test(
     "announce an instance as an interrupt, then dismiss it",
     async () => {
+      await admin.getByRole("button", { name: "Instance", exact: true }).click();
       await admin.getByLabel("Announcement", { exact: true }).selectOption({ label: "Fire exit" });
-      await admin.getByRole("button", { name: "Interrupt" }).click();
+      await admin.getByRole("button", { name: "Announce", exact: true }).click();
       await admin
         .locator('sb-strip .mode[data-mode="interrupt"]', { hasText: "until dismissed" })
         .waitFor();
@@ -171,7 +172,7 @@ describe.skipIf(!enabled)("admin", () => {
 
       // Dimming instead is a choice.
       await admin.getByLabel("Beneath the announcement").selectOption({ label: "Dim the screen" });
-      await admin.getByRole("button", { name: "Interrupt" }).click();
+      await admin.getByRole("button", { name: "Announce", exact: true }).click();
       await screen.locator("sb-compositor .dim.on").waitFor({ state: "attached" });
       expect(storbild.hub.state.live.interrupt?.below).toBe("dim");
       await admin.getByRole("button", { name: "Dismiss" }).click();

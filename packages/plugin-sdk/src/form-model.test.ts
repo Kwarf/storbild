@@ -63,6 +63,40 @@ group("describeForm", () => {
     expect(form.at).toMatchObject({ kind: "datetime", label: "Starts" });
   });
 
+  test("asset fields keep their accepted types, also as list items", () => {
+    const form = properties(
+      formOf(
+        z.object({
+          logo: fields.asset({ accept: ["image/*"] }).optional(),
+          font: fields.asset(),
+          images: z.array(fields.asset({ accept: ["image/png", "image/jpeg"] })).min(1),
+        }),
+      ),
+    );
+    expect(form.logo).toEqual({
+      kind: "asset",
+      accept: ["image/*"],
+      label: "Logo",
+      required: false,
+      nullable: false,
+    });
+    expect(form.font).toMatchObject({ kind: "asset", required: true });
+    expect(form.font && "accept" in form.font).toBe(false);
+    expect(form.images).toMatchObject({
+      kind: "list",
+      minItems: 1,
+      items: { kind: "asset", accept: ["image/png", "image/jpeg"] },
+    });
+    expect(form.font && initialValue(form.font)).toBe("");
+  });
+
+  test("an asset field accepts only asset IDs", () => {
+    const schema = fields.asset();
+    expect(schema.safeParse("a".repeat(64)).success).toBe(true);
+    expect(schema.safeParse("").success).toBe(false);
+    expect(schema.safeParse("../x").success).toBe(false);
+  });
+
   test("enums and literal unions are selects; nullable fields are flagged", () => {
     const form = properties(
       formOf(

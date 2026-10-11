@@ -272,9 +272,12 @@ interface FontRef { family: string; assetIds?: string[] }   // uploaded woff2 fi
 
 ### 4.7 Assets
 
-- Uploaded files (images, fonts, optional video) are stored on disk named by content hash, with metadata (name, MIME type, size, dimensions, thumbnail) in SQLite.
-- Assets are served immutably at `/assets/<hash>` with long cache headers. Replacing an asset creates a new hash, and the instances referencing it are updated.
-- Validate MIME type and size on upload, and never serve user uploads as HTML.
+- Uploaded files (images, fonts, and later video) are stored on disk named by their SHA-256, with metadata (name, MIME type, size, dimensions, whether there is a thumbnail) in SQLite. The admin makes the thumbnails, so the server needs no image library.
+- Assets are served immutably at `/assets/<hash>` with long cache headers, on both apps. Replacing an asset (a new hash, with the instances referencing it updated) is deferred.
+- The type is sniffed from the content and the size is limited (`STORBILD_MAX_UPLOAD_MB`) on upload. User uploads are never served as a page (`nosniff` and a sandboxing CSP).
+- An asset that an instance or theme uses can't be deleted.
+
+Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
 
 ### 4.8 Full state
 
@@ -351,7 +354,7 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
-M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md)).
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted.
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -397,7 +400,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
   - Lifecycle: `prepare()` (preload; awaited before the scene is used), `enter(at)`, `exit(at)`, `dispose()`.
   - Scenes don't implement transitions. The compositor owns them.
-- **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components, `<sb-form>` and `<sb-field>`. The `fields` helpers (`markdown`, `color`, `duration`, `datetime`) tag a schema with the widget it needs. A plugin may provide a custom editor element in its admin module, built from the same components (text, markdown, number, colour, duration, datetime, select, list, and the asset picker from M6b), so it looks native ([ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md)).
+- **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components, `<sb-form>` and `<sb-field>`. The `fields` helpers (`markdown`, `color`, `duration`, `datetime`, `asset`) tag a schema with the widget it needs. A plugin may provide a custom editor element in its admin module, built from the same components (text, markdown, number, colour, duration, datetime, select, list and the asset picker), so it looks native ([ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)).
 - **Server (optional):** `server(ctx)` runs when the plugin is loaded. Its context offers:
   - `ctx.settings()` and `ctx.onSettingsChange(cb)`
   - `ctx.instances(type?)` and `ctx.onInstancesChange(cb)`
@@ -422,9 +425,9 @@ A plugin package's `exports["."]` is the definition module above, which only the
 | Plugin | Types | Notes |
 |---|---|---|
 | `markdown` | scene `text` | Title plus markdown body; theme typography |
-| `slideshow` | scene `images` | Multiple images; duration = count × per-image time; `background: "own"` |
+| `slideshow` | scene `images` | Multiple images; duration = count × per-image time; `background: "own"`. Built in M6b |
 | `countdown` | scene `countdown`, overlay `countdown` | Target time; renders `target − serverNow()` |
-| `announcement` | scene `announcement` | Big-text message; intended for interrupts and takes |
+| `announcement` | scene `announcement` | Big-text message on an opaque panel; intended for interrupts and takes. Built in M6b |
 | `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code; clock |
 | `now-playing` | overlay `now-playing` (singleton) | Server part consumes an upstream **SSE stream** (URL in settings) and writes the track to plugin state; stale-hide. Low priority for details |
 
@@ -466,7 +469,7 @@ Sync client, bundling and failure handling are specified in [ADR 0005](docs/deci
 - **Left sidebar:** Live · Rotation · Schedule · Library · Overlays · Theme · Plugins · Settings.
 - **Pinned now/next strip:** a small live preview (the real viewer at reduced scale, driven by the admin's state; no second stream), the current scene with time remaining, the next scene, and the active overlays. Also a prominent **auto vs. override indicator**, for example "Announcement active, returns to rotation in 2:30".
 - **Live panel:**
-  - **Announce:** pick an instance, or type a quick message, which creates an announcement instance.
+  - **Announce:** pick an instance, or type a quick message, which creates an announcement instance that stays in the library.
   - **Take now** and **Resume rotation**.
   - **Blackout:** a guarded control (hold to activate).
 - **Rotation:** dense rows with drag-to-reorder, inline duration and enabled toggle, and time windows.
@@ -623,9 +626,12 @@ Show settings in state, the JSON Schema endpoint, the `fields` helpers, the SDK'
 - Asset store per §4.7: upload, thumbnails, serving at `/assets/<hash>`, and an asset picker form component.
 - **Schedule:** the `cue.*` commands and a day-ordered cue list with CRUD.
 - The `announcement` plugin (from M9), built on the public SDK only. It renders an opaque panel, so the interrupt modes `dim` and `show` are useful ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md)).
-- Quick announce: type a message in the Live panel, which creates an `announcement` instance and interrupts with it. Decide whether such instances are kept in the library or cleaned up (§11).
+- The `slideshow` plugin (from M9), so images reach the screen before M7's backgrounds.
+- Quick announce: type a message in the Live panel, which creates an `announcement` instance and interrupts with it. The instance is kept in the library.
 
 **Done when:** a complete show, including images and scheduled cues, can be built from scratch in the admin and runs unattended. A typed message can be announced in a few seconds.
+
+The asset store, the asset picker, the `cue.*` rules, both plugins, quick announce and the pages are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
 
 ### M7 — Theming
 
@@ -654,7 +660,7 @@ Show settings in state, the JSON Schema endpoint, the `fields` helpers, the SDK'
 
 Implement the plugins in §6.4 using only the public SDK, each with tests:
 
-- `markdown` (polish the M2 fixture), `slideshow`, `countdown` (scene and overlay), `info` (Wi-Fi with QR, clock). `announcement` is built in M6b.
+- `markdown` (polish the M2 fixture), `countdown` (scene and overlay), `info` (Wi-Fi with QR, clock). `announcement` and `slideshow` are built in M6b.
 - `now-playing`: the server part consumes an upstream SSE stream from a URL in settings, maps events to `{ artist, title }` in plugin state, reconnects with backoff, and stale-hides. Mapping details stay flexible.
 
 **Done when:** each plugin works in a real show, adapts to theme changes, and appears correctly in the admin with generated or custom forms.
@@ -687,5 +693,4 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- Whether quick-announce messages should be auto-deleted after use, or kept in the library.
 - The exact upstream event format for `now-playing` (to be defined when the music service is known).

@@ -13,6 +13,7 @@ const envSchema = z
       .string({ error: "is required; generate one with `bun run hash-password`" })
       .startsWith("$argon2id$", "must be an argon2id hash ($argon2id$...)"),
     STORBILD_PLUGIN_PATHS: z.string().default(""),
+    STORBILD_MAX_UPLOAD_MB: z.coerce.number().positive().max(1024).default(25),
     STORBILD_VIEWER_URL: z.url().default("http://localhost:3000"),
     STORBILD_ADMIN_URL: z.url().default("http://localhost:3001"),
   })
@@ -30,6 +31,8 @@ export interface Config {
   admin: { port: number; publicUrl: string; username: string; passwordHash: string };
   dataDir: string;
   pluginPaths: string[];
+  /** The largest asset upload, in bytes. */
+  maxUploadBytes: number;
 }
 
 export class ConfigError extends Error {
@@ -66,5 +69,6 @@ export function parseConfig(env: Record<string, string | undefined>, pathDelimit
     pluginPaths: e.STORBILD_PLUGIN_PATHS.split(pathDelimiter)
       .map((p) => p.trim())
       .filter((p) => p !== ""),
+    maxUploadBytes: Math.floor(e.STORBILD_MAX_UPLOAD_MB * 1024 * 1024),
   };
 }

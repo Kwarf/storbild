@@ -63,6 +63,13 @@ const migrations: string[] = [
     CASE json_extract(data, '$.action.dimBelow') WHEN 1 THEN 'dim' ELSE 'show' END
   ) WHERE json_type(data, '$.action.dimBelow') IS NOT NULL;
   `,
+  // Uploaded files' metadata (ADR 0011); the files are in the data directory's `assets/`.
+  `
+  CREATE TABLE assets (
+    id TEXT PRIMARY KEY,
+    data TEXT NOT NULL CHECK (json_valid(data))
+  ) STRICT;
+  `,
 ];
 
 /** Opens (creating if needed) and migrates the database. `path` may be ":memory:". */

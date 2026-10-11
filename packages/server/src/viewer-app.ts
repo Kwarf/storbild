@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { type AssetStore, createAssetRoutes } from "./assets.ts";
 import { createModuleRoutes, type ModuleRegistry } from "./plugins/routes.ts";
 import { type StreamOptions, streamState } from "./sse.ts";
 import type { StateHub } from "./state-hub.ts";
@@ -12,15 +13,18 @@ export interface ViewerAppDeps {
   modules?: ModuleRegistry;
   /** The viewer page's bundle. Without it, `/` is a 404. */
   viewer?: ViewerBundle;
+  /** Uploaded files, served at `/assets/<id>`. */
+  assets?: AssetStore;
 }
 
 /**
  * The screen-facing app (viewer page, /events, /time). It must never mount admin routes:
  * the screen hostname is proxied here and only here.
  */
-export function createViewerApp({ hub, now, stream, modules, viewer }: ViewerAppDeps) {
+export function createViewerApp({ hub, now, stream, modules, viewer, assets }: ViewerAppDeps) {
   const app = new Hono();
   if (modules) app.route("/", createModuleRoutes(modules));
+  if (assets) app.route("/", createAssetRoutes(assets));
   if (viewer) app.route("/", createViewerPageRoutes(viewer, modules?.importMap ?? { imports: {} }));
   app.get("/events", (c) => streamState(c, hub, stream));
   app.get("/time", (c) => {

@@ -8,6 +8,7 @@ import {
 } from "@storbild/core";
 import { z } from "zod";
 import { type AdminAppDeps, createAdminApp } from "./admin-app.ts";
+import { AssetStore } from "./assets.ts";
 import { LoginLimiter, SessionStore } from "./auth.ts";
 import { openDatabase } from "./db.ts";
 import type { SchedulerTimers } from "./scheduler.ts";
@@ -82,6 +83,9 @@ export interface TestAdminAppOptions {
   clock?: FakeClock;
   bundle?: AdminAppDeps["bundle"];
   schemas?: AdminAppDeps["schemas"];
+  /** A directory for an asset store; without it, the app has none. */
+  assetsDir?: string;
+  maxUploadBytes?: number;
 }
 
 /** An admin app on `createTestHub()`, with sessions in memory and time on a `FakeClock`. */
@@ -90,8 +94,12 @@ export function createTestAdminApp({
   clock = new FakeClock(1_000_000),
   bundle,
   schemas,
+  assetsDir,
+  maxUploadBytes,
 }: TestAdminAppOptions = {}) {
   const hub = createTestHub();
+  const assets = assetsDir ? new AssetStore({ dir: assetsDir, hub, now: clock.now }) : undefined;
+  assets?.start();
   const sessions = new SessionStore(openDatabase(":memory:"), { now: clock.now });
   const app = createAdminApp({
     hub,
@@ -105,8 +113,10 @@ export function createTestAdminApp({
     },
     ...(bundle && { bundle }),
     ...(schemas && { schemas }),
+    ...(assets && { assets }),
+    ...(maxUploadBytes !== undefined && { maxUploadBytes }),
   });
-  return { app, hub, sessions, clock };
+  return { app, hub, sessions, clock, assets };
 }
 
 /** A clock and timers that only move when told to, for the scheduler. */

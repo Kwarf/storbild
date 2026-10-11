@@ -1,0 +1,23 @@
+{
+  "name": "@storbild/plugin-announcement",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/plugin.ts"
+  },
+  "storbild": {
+    "viewer": "./src/viewer.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "peerDependencies": {
+    "@storbild/plugin-sdk": "workspace:*",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "@storbild/plugin-sdk": "workspace:*",
+    "lit": "3.3.3"
+  }
+}

@@ -1,6 +1,6 @@
 // Turns the JSON Schema of a config or settings schema into a tree of form fields (ADR 0010).
 // No DOM: the admin's form components render the tree, and tests check it directly.
-import { WIDGET_KEY } from "./fields.ts";
+import { ACCEPT_KEY, WIDGET_KEY } from "./fields.ts";
 
 export type JsonSchema = { [key: string]: unknown };
 
@@ -19,6 +19,8 @@ export type Field = FieldBase &
     | { kind: "text" | "markdown" | "color" | "duration" | "datetime" | "boolean" }
     | { kind: "number"; integer: boolean; minimum?: number; maximum?: number }
     | { kind: "select"; options: { value: unknown; label: string }[] }
+    /** An asset ID, limited to MIME types like `image/*` when `accept` is given. */
+    | { kind: "asset"; accept?: string[] }
     | { kind: "object"; properties: { key: string; field: Field }[] }
     | { kind: "list"; items: Field; minItems?: number; maxItems?: number }
     /** Anything the form can't represent, edited as raw JSON. */
@@ -44,7 +46,7 @@ const isObject = (value: unknown): value is JsonSchema =>
 const bound = (value: unknown) =>
   typeof value === "number" && Math.abs(value) < Number.MAX_SAFE_INTEGER ? value : undefined;
 
-const widgets = new Set(["markdown", "color", "duration", "datetime"]);
+const widgets = new Set(["markdown", "color", "duration", "datetime", "asset"]);
 
 /** Describes a whole form: the root schema of a config or settings value. */
 export function describeForm(schema: JsonSchema): Field {
@@ -102,6 +104,11 @@ function describe(input: JsonSchema, ctx: Context): Field {
     const expected =
       widget === "duration" || widget === "datetime" ? ["integer", "number"] : ["string"];
     if (expected.includes(type as string)) {
+      if (widget === "asset") {
+        const accept = schema[ACCEPT_KEY];
+        const types = Array.isArray(accept) ? accept.filter((t) => typeof t === "string") : [];
+        return { ...base, kind: "asset", ...(types.length > 0 && { accept: types }) };
+      }
       return { ...base, kind: widget as "markdown" | "color" | "duration" | "datetime" };
     }
   }
@@ -228,6 +235,7 @@ export function initialValue(field: Field): unknown {
       return [];
     case "text":
     case "markdown":
+    case "asset":
       return "";
     case "boolean":
       return false;

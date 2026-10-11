@@ -6,6 +6,9 @@ import "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
 import { html as staticHtml, unsafeStatic } from "lit/static-html.js";
 import { CommandFailed, errorText, type Schemas, send } from "./api.ts";
+import "./asset-panel.ts";
+import { sizeText } from "./asset-panel.ts";
+import { uploadAsset } from "./assets.ts";
 import {
   groupInstances,
   previewState,
@@ -24,6 +27,9 @@ interface Draft {
   name: string;
   config: unknown;
 }
+
+/** The selection of an uploaded file is this prefix plus its ID. */
+const ASSET = "asset:";
 
 /** Admin modules by URL; each is imported once. */
 const editorModules = new Map<string, Promise<boolean>>();
@@ -45,7 +51,8 @@ function loadEditorModule(url: string): Promise<boolean> {
 
 /**
  * The Library (DESIGN.md §8.2): instances grouped by type, and a panel that creates or edits
- * one with its plugin's generated form or custom editor, next to a live preview.
+ * one with its plugin's generated form or custom editor, next to a live preview. Uploaded files
+ * are listed under the instances, with a panel of their own (ADR 0011).
  */
 export class LibraryPage extends LitElement {
   static override properties: PropertyDeclarations = {
@@ -59,6 +66,8 @@ export class LibraryPage extends LitElement {
     busy: { state: true },
     confirmDelete: { state: true },
     editorReady: { state: true },
+    uploading: { state: true },
+    uploadError: { state: true },
   };
 
   static override styles = [
@@ -184,6 +193,26 @@ export class LibraryPage extends LitElement {
       select.types {
         max-width: 360px;
       }
+      .group-head {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 8px;
+        border-bottom: 1px solid var(--sb-line);
+      }
+      .group-head h3 {
+        border-bottom: 0;
+      }
+      .group-head button {
+        margin-bottom: 4px;
+        padding: 2px 8px;
+      }
+      .group > .error {
+        margin: 6px 0 0;
+      }
+      input[type="file"] {
+        display: none;
+      }
     `,
   ];
 
@@ -199,6 +228,8 @@ export class LibraryPage extends LitElement {
   declare confirmDelete: boolean;
   /** The custom editor's module has loaded (true), failed (false), or is loading (undefined). */
   declare editorReady: boolean | undefined;
+  declare uploading: boolean;
+  declare uploadError: string | undefined;
   /** The stored instance the draft was made from; edits are what differ from it. */
   #base: Instance | undefined;
   /** An instance just created, selected before its patch has arrived. */
@@ -209,11 +240,21 @@ export class LibraryPage extends LitElement {
     this.issues = [];
     this.busy = false;
     this.confirmDelete = false;
+    this.uploading = false;
   }
 
   protected override willUpdate() {
     const state = this.state;
     if (!state || this.selected === undefined || this.selected === "new") return;
+    if (this.selected.startsWith(ASSET)) {
+      const id = this.selected.slice(ASSET.length);
+      if (state.assets[id]) {
+        if (this.selected === this.#awaiting) this.#awaiting = undefined;
+      } else if (this.selected !== this.#awaiting) {
+        this.#select(undefined);
+      }
+      return;
+    }
     const instance = state.instances[this.selected];
     if (!instance) {
       // Deleted, here or elsewhere.
@@ -270,14 +311,76 @@ export class LibraryPage extends LitElement {
               </section>`,
             )
       }
+      ${this.#files(state)}
     </div>`;
   }
+
+  #files(state: ShowState) {
+    const assets = Object.values(state.assets).sort((a, b) => a.name.localeCompare(b.name));
+    return html`<section class="group" data-group="files">
+      <div class="group-head">
+        <h3>Files</h3>
+        <button
+          ?disabled=${this.uploading}
+          @click=${() => this.renderRoot.querySelector<HTMLInputElement>("input[type=file]")?.click()}
+        >
+          ${this.uploading ? "Uploading…" : "Upload…"}
+        </button>
+        <input type="file" aria-label="Upload a file" @change=${this.#upload} />
+      </div>
+      ${this.uploadError ? html`<p class="error" role="alert">${this.uploadError}</p>` : nothing}
+      ${
+        assets.length === 0
+          ? html`<p class="empty">No files yet. Upload images to use them in scenes.</p>`
+          : html`<ul>
+              ${assets.map(
+                (asset) => html`<li>
+                  <button
+                    aria-current=${this.selected === ASSET + asset.id ? "true" : "false"}
+                    data-asset=${asset.id}
+                    @click=${() => this.#select(ASSET + asset.id)}
+                  >
+                    <span class="name">${asset.name}</span>
+                    <span class="meta num">
+                      ${asset.width && asset.height ? `${asset.width}×${asset.height}` : sizeText(asset.size)}
+                    </span>
+                  </button>
+                </li>`,
+              )}
+            </ul>`
+      }
+    </section>`;
+  }
+
+  #upload = async (e: Event) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    this.uploading = true;
+    this.uploadError = undefined;
+    try {
+      const asset = await uploadAsset(file);
+      this.#awaiting = ASSET + asset.id;
+      this.#select(ASSET + asset.id);
+    } catch (error) {
+      this.uploadError = errorText(error);
+    } finally {
+      this.uploading = false;
+    }
+  };
 
   #panel(state: ShowState) {
     if (this.selected === undefined) {
       return html`<div class="panel">
         <p class="hint">Select an instance to edit it, or create a new one.</p>
       </div>`;
+    }
+    if (this.selected.startsWith(ASSET)) {
+      const asset = state.assets[this.selected.slice(ASSET.length)];
+      return asset
+        ? html`<sb-asset-panel aria-label="File" .state=${state} .asset=${asset}></sb-asset-panel>`
+        : nothing;
     }
     if (this.selected === "new" && !this.draft) return this.#typePicker(state);
     const draft = this.draft;

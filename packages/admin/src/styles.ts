@@ -7,7 +7,8 @@ export const controls = css`
   }
   button,
   input,
-  select {
+  select,
+  textarea {
     font: inherit;
     color: inherit;
   }
@@ -40,7 +41,8 @@ export const controls = css`
     border-color: var(--sb-text);
   }
   input[type="text"],
-  select {
+  select,
+  textarea {
     padding: 5px 8px;
     background: var(--sb-field);
     border: 1px solid var(--sb-line-strong);

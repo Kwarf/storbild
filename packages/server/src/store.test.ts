@@ -6,6 +6,9 @@ import { createInitialState, type ShowState } from "@storbild/core";
 import { openDatabase } from "./db.ts";
 import { loadState, saveState } from "./store.ts";
 
+const logo = "1".repeat(64);
+const font = "2".repeat(64);
+
 function fullState(): ShowState {
   const base = createInitialState({ now: 100, newId: () => "theme1" });
   return {
@@ -78,6 +81,19 @@ function fullState(): ShowState {
       main: { instanceId: "i1", itemId: "p1", startedAt: 10 },
       blackout: true,
     },
+    assets: {
+      [logo]: {
+        id: logo,
+        name: "logo.png",
+        mimeType: "image/png",
+        size: 1234,
+        width: 640,
+        height: 480,
+        thumbnail: true,
+        createdAt: 50,
+      },
+      [font]: { id: font, name: "display.woff2", mimeType: "font/woff2", size: 99, createdAt: 60 },
+    },
     settings: { defaultDurationMs: 20_000, transitionMs: 0 },
   };
 }
@@ -143,9 +159,8 @@ describe("persistence", () => {
       const path = join(dir, "storbild.db");
       const db = openDatabase(path);
       saveState(db, fullState());
-      // Rewind to the schema before the change and store the old shape.
-      const version = (db.query("PRAGMA user_version").get() as { user_version: number })
-        .user_version;
+      // Rewind to the schema before the change (version 3) and store the old shape.
+      db.run("DROP TABLE assets");
       const old = (dimBelow: boolean) => ({ instanceId: "i1", startedAt: 12, dimBelow });
       db.run("UPDATE meta SET value = ? WHERE key = 'live'", [
         JSON.stringify({ interrupt: old(true), blackout: false }),
@@ -160,7 +175,7 @@ describe("persistence", () => {
           action: { type: "interrupt", instanceId: "i1", dimBelow: true },
         }),
       ]);
-      db.run(`PRAGMA user_version = ${version - 1}`);
+      db.run("PRAGMA user_version = 3");
       db.close();
 
       const reopened = openDatabase(path);

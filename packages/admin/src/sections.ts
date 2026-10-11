@@ -2,7 +2,7 @@
 export const sections = [
   { path: "/live", label: "Live" },
   { path: "/rotation", label: "Rotation" },
-  { path: "/schedule", label: "Schedule", milestone: "M6b" },
+  { path: "/schedule", label: "Schedule" },
   { path: "/library", label: "Library" },
   { path: "/overlays", label: "Overlays", milestone: "M8" },
   { path: "/theme", label: "Theme", milestone: "M7" },

@@ -1,4 +1,10 @@
-import { type Command, type InterruptBelow, isPlayableScene, type ShowState } from "@storbild/core";
+import {
+  type Command,
+  type Instance,
+  type InterruptBelow,
+  isPlayableScene,
+  type ShowState,
+} from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
 import { send } from "./api.ts";
@@ -9,6 +15,15 @@ import { controls } from "./styles.ts";
 
 type Action = "announce" | "take" | "blackout";
 
+/** The plugin and type that quick announce creates (ADR 0011). */
+const QUICK = { plugin: "announcement", type: "announcement" } as const;
+
+/** An instance name from a typed message: its first line, shortened. */
+export function messageName(message: string): string {
+  const line = message.trim().split("\n")[0]?.trim() ?? "";
+  return line.length > 40 ? `${line.slice(0, 39).trimEnd()}…` : line || "Announcement";
+}
+
 /** What the screen shows beneath an announcement (ADR 0008). */
 const belowOptions: [InterruptBelow, string][] = [
   ["hide", "Cover the screen"],
@@ -18,7 +33,8 @@ const belowOptions: [InterruptBelow, string][] = [
 
 /**
  * The Live panel (DESIGN.md §8.2): announce (an interrupt), take now, resume and blackout.
- * Quick announce with a typed message arrives with the announcement plugin (M6b).
+ * Quick announce turns a typed message into an `announcement` instance and interrupts with it;
+ * the instance stays in the library, so it can be announced again (ADR 0011).
  */
 export class LivePanel extends LitElement {
   static override properties: PropertyDeclarations = {
@@ -27,6 +43,8 @@ export class LivePanel extends LitElement {
     errors: { state: true },
     busy: { state: true },
     announce: { state: true },
+    message: { state: true },
+    kind: { state: true },
     takeId: { state: true },
   };
 
@@ -71,11 +89,39 @@ export class LivePanel extends LitElement {
         flex: 1 1 240px;
         max-width: 360px;
       }
-      select.below {
-        flex: 0 0 auto;
-      }
       input[type="text"] {
         width: 128px;
+      }
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 560px;
+        resize: vertical;
+        line-height: 1.4;
+      }
+      .switch {
+        display: inline-flex;
+        margin-bottom: 10px;
+      }
+      .switch button {
+        border-radius: 0;
+        font-weight: var(--sb-weight);
+      }
+      .switch button:first-child {
+        border-radius: var(--sb-radius) 0 0 var(--sb-radius);
+      }
+      .switch button:last-child {
+        border-radius: 0 var(--sb-radius) var(--sb-radius) 0;
+        margin-left: -1px;
+      }
+      .switch button[aria-pressed="true"] {
+        position: relative;
+        background: var(--sb-bg-sunken);
+        border-color: var(--sb-text);
+        font-weight: var(--sb-weight-strong);
+      }
+      select.below {
+        flex: 0 0 auto;
       }
       .active {
         padding: 8px 10px;
@@ -99,6 +145,10 @@ export class LivePanel extends LitElement {
   declare errors: Partial<Record<Action, string>>;
   declare busy: Action | undefined;
   declare announce: { instanceId: string; duration: string; below: InterruptBelow };
+  /** The quick announce message being typed. */
+  declare message: string;
+  /** Whether a typed message or an existing instance is announced. */
+  declare kind: "message" | "instance";
   declare takeId: string;
   #takeDuration = "";
   #ticker: number | undefined;
@@ -108,6 +158,8 @@ export class LivePanel extends LitElement {
     this.errors = {};
     this.busy = undefined;
     this.announce = { instanceId: "", duration: "", below: "hide" };
+    this.message = "";
+    this.kind = "message";
     this.takeId = "";
   }
 
@@ -129,16 +181,55 @@ export class LivePanel extends LitElement {
     if (!state || !ctx) return html`<h1>Live</h1><p class="muted">Connecting…</p>`;
     const status = onAir(state, ctx.serverNow());
     const override = status.timeline.mode === "override";
+    // Typed messages need the announcement plugin; without it, only instances can be announced.
+    const quick = state.plugins[QUICK.plugin]?.status === "ok";
+    const kind = quick ? this.kind : "instance";
     return html`
       <h1>Live</h1>
 
       <section data-section="announce">
         <h2>Announce</h2>
-        <p class="hint">Shows an instance above everything else until it ends or is dismissed.</p>
+        <p class="hint">
+          Shows a message or an instance above everything else until it ends or is dismissed.
+        </p>
+        ${
+          quick
+            ? html`<div class="switch" role="group" aria-label="Announce what">
+                ${(["message", "instance"] as const).map(
+                  (kind) => html`<button
+                    aria-pressed=${kind === this.kind ? "true" : "false"}
+                    @click=${() => {
+                      this.kind = kind;
+                    }}
+                  >
+                    ${kind === "message" ? "Message" : "Instance"}
+                  </button>`,
+                )}
+              </div>`
+            : nothing
+        }
         <div class="row">
-          ${this.#picker("Announcement", this.announce.instanceId, (instanceId) => {
-            this.announce = { ...this.announce, instanceId };
-          })}
+          ${
+            kind === "message"
+              ? html`<textarea
+                  rows="3"
+                  aria-label="Message"
+                  placeholder="Type a message. Ctrl+Enter announces it."
+                  .value=${this.message}
+                  @input=${(event: Event) => {
+                    this.message = (event.target as HTMLTextAreaElement).value;
+                  }}
+                  @keydown=${(event: KeyboardEvent) => {
+                    if (event.key === "Enter" && (event.ctrlKey || event.metaKey))
+                      void this.#announce();
+                  }}
+                ></textarea>`
+              : this.#picker("Announcement", this.announce.instanceId, (instanceId) => {
+                  this.announce = { ...this.announce, instanceId };
+                })
+          }
+        </div>
+        <div class="row">
           <input
             type="text"
             class="num"
@@ -167,12 +258,13 @@ export class LivePanel extends LitElement {
           </select>
           <button
             class="primary"
-            ?disabled=${!this.announce.instanceId || this.busy === "announce"}
+            ?disabled=${this.busy === "announce" || (kind === "message" ? this.message.trim() === "" : !this.announce.instanceId)}
             @click=${this.#announce}
           >
-            Interrupt
+            Announce
           </button>
         </div>
+        ${this.#error("announce")}
         ${
           status.mode === "interrupt" || status.timeline.interrupt
             ? html`<div class="row active">
@@ -186,7 +278,6 @@ export class LivePanel extends LitElement {
               </div>`
             : nothing
         }
-        ${this.#error("announce")}
       </section>
 
       <section data-section="take">
@@ -196,6 +287,8 @@ export class LivePanel extends LitElement {
           ${this.#picker("Scene to take", this.takeId, (instanceId) => {
             this.takeId = instanceId;
           })}
+        </div>
+        <div class="row">
           <input
             type="text"
             class="num"
@@ -259,17 +352,28 @@ export class LivePanel extends LitElement {
         (instance) => state.plugins[instance.plugin]?.types[instance.type]?.kind !== "overlay",
       )
       .sort((a, b) => a.name.localeCompare(b.name));
+    const option = (instance: Instance) => {
+      const playable = isPlayableScene(state, instance.id);
+      return html`<option value=${instance.id} ?selected=${value === instance.id} ?disabled=${!playable}>
+        ${instance.name}${playable ? "" : " (broken)"}
+      </option>`;
+    };
+    // Announcements, typed ones included, come first: they are what is announced most.
+    const isQuick = (instance: Instance) =>
+      instance.plugin === QUICK.plugin && instance.type === QUICK.type;
+    const announcements = scenes.filter(isQuick);
+    const others = scenes.filter((instance) => !isQuick(instance));
     return html`<select
       aria-label=${label}
       @change=${(event: Event) => onPick((event.target as HTMLSelectElement).value)}
     >
       <option value="" ?selected=${value === ""}>Choose an instance…</option>
-      ${scenes.map((instance) => {
-        const playable = isPlayableScene(state, instance.id);
-        return html`<option value=${instance.id} ?selected=${value === instance.id} ?disabled=${!playable}>
-          ${instance.name}${playable ? "" : " (broken)"}
-        </option>`;
-      })}
+      ${
+        announcements.length > 0
+          ? html`<optgroup label="Announcements">${announcements.map(option)}</optgroup>
+              <optgroup label="Other scenes">${others.map(option)}</optgroup>`
+          : others.map(option)
+      }
     </select>`;
   }
 
@@ -282,23 +386,53 @@ export class LivePanel extends LitElement {
     return error ? html`<p class="error" role="alert">${error}</p>` : nothing;
   }
 
-  #announce = () => {
+  /**
+   * The shared duration in ms: undefined to hold until dismissed, or null after showing an
+   * error next to `action` when it can't be read.
+   */
+  #duration(action: Action): number | undefined | null {
     const durationMs = parseDuration(this.announce.duration);
     if (durationMs === null) {
       this.errors = {
         ...this.errors,
-        announce: "Enter a duration as seconds or m:ss, or leave it blank.",
+        [action]: "Enter a duration as seconds or m:ss, or leave it blank.",
       };
-      return;
     }
-    void this.#run("announce", {
+    return durationMs;
+  }
+
+  #interrupt(instanceId: string, durationMs: number | undefined): Command {
+    return {
       type: "live.interrupt",
       payload: {
-        instanceId: this.announce.instanceId,
+        instanceId,
         below: this.announce.below,
         ...(durationMs !== undefined && { durationMs }),
       },
+    };
+  }
+
+  /** Interrupts with the chosen instance, or with a new announcement of the typed message. */
+  #announce = async () => {
+    const quick = this.state?.plugins[QUICK.plugin]?.status === "ok";
+    const kind = quick ? this.kind : "instance";
+    const message = this.message.trim();
+    if (this.busy === "announce") return;
+    if (kind === "message" ? message === "" : !this.announce.instanceId) return;
+    const durationMs = this.#duration("announce");
+    if (durationMs === null) return;
+    if (kind === "instance") {
+      void this.#run("announce", this.#interrupt(this.announce.instanceId, durationMs));
+      return;
+    }
+    const ok = await this.#run("announce", async () => {
+      const { id } = await send({
+        type: "instance.create",
+        payload: { ...QUICK, name: messageName(message), config: { message } },
+      });
+      if (id) await send(this.#interrupt(id, durationMs));
     });
+    if (ok) this.message = "";
   };
 
   #take = () => {
@@ -316,16 +450,20 @@ export class LivePanel extends LitElement {
     });
   };
 
-  async #run(action: Action, command: Command) {
+  /** Sends a command, or runs several steps, showing a refusal next to the control. */
+  async #run(action: Action, work: Command | (() => Promise<void>)): Promise<boolean> {
     this.busy = action;
     this.errors = { ...this.errors, [action]: undefined };
     try {
-      await send(command);
+      if (typeof work === "function") await work();
+      else await send(work);
+      return true;
     } catch (error) {
       this.errors = {
         ...this.errors,
         [action]: error instanceof Error ? error.message : String(error),
       };
+      return false;
     } finally {
       this.busy = undefined;
     }

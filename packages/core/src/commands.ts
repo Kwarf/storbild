@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { assetIdSchema, assetMetaSchema } from "./schema/asset.ts";
 import { durationMsSchema, epochMsSchema, idSchema } from "./schema/common.ts";
+import { cueActionSchema } from "./schema/cue.ts";
 import { instanceBackgroundSchema } from "./schema/instance.ts";
 import { showSettingsSchema } from "./schema/settings.ts";
 import { interruptBelowSchema } from "./schema/timeline.ts";
@@ -63,6 +65,18 @@ export const commandSchema = z.discriminatedUnion("type", [
   /** Deletes a `missing` plugin's stored data and its instances for good. */
   command("plugin.remove", z.object({ plugin: z.string().min(1) })),
   command("settings.update", showSettingsSchema.partial()),
+  // Cues (ADR 0011): `at` must be in the future, and a fired cue can only be deleted.
+  command("cue.create", z.object({ at: epochMsSchema, action: cueActionSchema })),
+  /** Replaces the action whole when given. */
+  command(
+    "cue.update",
+    z.object({ id: idSchema, at: epochMsSchema.optional(), action: cueActionSchema.optional() }),
+  ),
+  command("cue.delete", z.object({ id: idSchema })),
+  // Assets are added by uploading them (`POST /api/assets`), which issues `asset.add`.
+  command("asset.update", z.object({ id: assetIdSchema, name: z.string().min(1) })),
+  /** Refused while anything uses the asset. */
+  command("asset.delete", z.object({ id: assetIdSchema })),
   // Live control (ADR 0006). Without `durationMs`, a take or interrupt holds until cleared.
   command("live.take", z.object({ instanceId: idSchema, durationMs: durationMsSchema.optional() })),
   command(
@@ -90,8 +104,9 @@ export const commandRequestSchema = z.intersection(
 export type CommandRequest = z.infer<typeof commandRequestSchema>;
 
 /**
- * Commands only the server issues, on behalf of the plugin runtime. They go through the same
- * reducer, persistence and broadcast as `Command`, but `POST /api/commands` never accepts them.
+ * Commands only the server issues, on behalf of the plugin runtime and the asset store. They go
+ * through the same reducer, persistence and broadcast as `Command`, but `POST /api/commands`
+ * never accepts them.
  */
 export const hostCommandSchema = z.discriminatedUnion("type", [
   command("plugin.setState", z.object({ plugin: z.string().min(1), state: z.json() })),
@@ -104,5 +119,7 @@ export const hostCommandSchema = z.discriminatedUnion("type", [
     }),
   ),
   command("instance.setState", z.object({ id: idSchema, state: z.json() })),
+  /** Registers an uploaded file; the asset store has already written it. */
+  command("asset.add", assetMetaSchema),
 ]);
 export type HostCommand = z.infer<typeof hostCommandSchema>;

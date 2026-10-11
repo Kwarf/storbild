@@ -1,6 +1,9 @@
+import { assetUsers } from "./assets.ts";
 import type { Command, HostCommand } from "./commands.ts";
 import { endOverride, interrupt, take } from "./live-control.ts";
 import { type Issue, type Normalized, normalizeConfig, normalizeSettings } from "./plugins.ts";
+import type { AssetMeta } from "./schema/asset.ts";
+import type { Cue, CueAction } from "./schema/cue.ts";
 import type { Instance } from "./schema/instance.ts";
 import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
@@ -178,6 +181,50 @@ function reduce(
     case "settings.update":
       return { state: { ...state, settings: merge(state.settings, command.payload) } };
 
+    case "cue.create": {
+      const { at, action } = command.payload;
+      checkCue(state, at, action, ctx);
+      const cue: Cue = { id: ctx.newId(), at, action };
+      return { state: { ...state, cues: [...state.cues, cue] }, id: cue.id };
+    }
+
+    case "cue.update": {
+      const { id, at, action } = command.payload;
+      const index = getCueIndex(state, id);
+      const cue = state.cues[index] as Cue;
+      if (cue.fired) throw new CommandError("invalid", `cue ${id} has fired; delete it instead`);
+      const next: Cue = { ...cue, at: at ?? cue.at, action: action ?? cue.action };
+      checkCue(state, next.at, next.action, ctx);
+      return { state: { ...state, cues: state.cues.with(index, next) } };
+    }
+
+    case "cue.delete": {
+      const index = getCueIndex(state, command.payload.id);
+      return { state: { ...state, cues: state.cues.toSpliced(index, 1) } };
+    }
+
+    case "asset.update": {
+      const { id, name } = command.payload;
+      return { state: withAsset(state, { ...getAsset(state, id), name }) };
+    }
+
+    case "asset.delete": {
+      const { id } = command.payload;
+      getAsset(state, id);
+      const users = assetUsers(state, id);
+      if (users.length > 0) {
+        const names = users.map((user) => `${user.kind} "${user.name}"`).join(", ");
+        throw new CommandError("invalid", `asset ${id} is used by ${names}`);
+      }
+      const { [id]: _, ...assets } = state.assets;
+      return { state: { ...state, assets } };
+    }
+
+    case "asset.add":
+      // The same content uploaded again keeps its first name and time.
+      if (state.assets[command.payload.id]) return { state };
+      return { state: withAsset(state, command.payload) };
+
     case "plugin.setState": {
       const { plugin, state: value } = command.payload;
       return { state: withPlugin(state, plugin, { ...getPlugin(state, plugin), state: value }) };
@@ -281,6 +328,34 @@ function checkScene(state: ShowState, id: string) {
   if (!isPlayableScene(state, id)) {
     throw new CommandError("invalid", `instance ${id} is broken or not a scene`);
   }
+}
+
+function getCueIndex(state: ShowState, id: string): number {
+  const index = state.cues.findIndex((cue) => cue.id === id);
+  if (index === -1) throw new CommandError("not_found", `cue ${id} not found`);
+  return index;
+}
+
+/** A cue must lie in the future and name a playable scene or an existing theme. */
+function checkCue(state: ShowState, at: number, action: CueAction, ctx: CommandContext) {
+  if (at <= ctx.now) throw new CommandError("invalid", "a cue must be in the future");
+  if (action.type === "activateTheme") {
+    if (!state.themes[action.themeId]) {
+      throw new CommandError("not_found", `theme ${action.themeId} not found`);
+    }
+  } else {
+    checkScene(state, action.instanceId);
+  }
+}
+
+function getAsset(state: ShowState, id: string): AssetMeta {
+  const asset = state.assets[id];
+  if (!asset) throw new CommandError("not_found", `asset ${id} not found`);
+  return asset;
+}
+
+function withAsset(state: ShowState, asset: AssetMeta): ShowState {
+  return { ...state, assets: { ...state.assets, [asset.id]: asset } };
 }
 
 function getItemIndex(state: ShowState, id: string): number {

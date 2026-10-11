@@ -5,7 +5,7 @@ import type { z } from "zod";
 
 export { API_VERSION, type JsonValue, type OverlaySlot } from "@storbild/core";
 export { z } from "zod";
-export { fields, WIDGET_KEY, type Widget } from "./fields.ts";
+export { ACCEPT_KEY, fields, WIDGET_KEY, type Widget } from "./fields.ts";
 
 /** One instance type a plugin contributes: a full-screen scene or an overlay widget. */
 export interface InstanceTypeDefinition<Config extends z.ZodType, Settings extends z.ZodType> {

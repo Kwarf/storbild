@@ -3,6 +3,7 @@ import type { Config } from "@storbild/core";
 import { ConfigError, createInitialState, reconcilePlugins } from "@storbild/core";
 import { createAdminApp } from "./admin-app.ts";
 import { getAdminBundle } from "./admin-page.ts";
+import { AssetStore } from "./assets.ts";
 import { LoginLimiter, SessionStore } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
@@ -80,6 +81,8 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   hub.update((state) => reconcilePlugins(state, catalog));
   const scheduler = new Scheduler(hub, { now, ...(options.timers && { timers: options.timers }) });
   scheduler.start();
+  const assets = new AssetStore({ dir: join(config.dataDir, "assets"), hub, now });
+  assets.start();
   const [viewerBundle, adminBundle] = await Promise.all([getViewerBundle(), getAdminBundle()]);
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
@@ -96,6 +99,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       now,
       modules: registry,
       viewer: viewerBundle,
+      assets,
       ...(stream && { stream }),
     }).fetch,
   });
@@ -119,6 +123,8 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       schemas: Object.fromEntries(
         [...modules].flatMap(([id, { schemas }]) => (schemas ? [[id, schemas]] : [])),
       ),
+      assets,
+      maxUploadBytes: config.maxUploadBytes,
       ...(stream && { stream }),
     }).fetch,
   });
@@ -132,6 +138,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     async stop() {
       scheduler.stop();
       plugins.stop();
+      assets.stop();
       // Force-close open SSE streams; clients reconnect and resume.
       await Promise.all([viewer.stop(true), admin.stop(true)]);
       db.close();

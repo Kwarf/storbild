@@ -75,8 +75,32 @@
         "lit": "3.3.3",
       },
     },
+    "plugins/announcement": {
+      "name": "@storbild/plugin-announcement",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "3.3.3",
+      },
+      "peerDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "^3.3.3",
+      },
+    },
     "plugins/markdown": {
       "name": "@storbild/plugin-markdown",
+      "version": "0.2.0",
+      "devDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "3.3.3",
+      },
+      "peerDependencies": {
+        "@storbild/plugin-sdk": "workspace:*",
+        "lit": "^3.3.3",
+      },
+    },
+    "plugins/slideshow": {
+      "name": "@storbild/plugin-slideshow",
       "version": "0.1.0",
       "devDependencies": {
         "@storbild/plugin-sdk": "workspace:*",
@@ -119,9 +143,13 @@
 
     "@storbild/core": ["@storbild/core@workspace:packages/core"],
 
+    "@storbild/plugin-announcement": ["@storbild/plugin-announcement@workspace:plugins/announcement"],
+
     "@storbild/plugin-markdown": ["@storbild/plugin-markdown@workspace:plugins/markdown"],
 
     "@storbild/plugin-sdk": ["@storbild/plugin-sdk@workspace:packages/plugin-sdk"],
+
+    "@storbild/plugin-slideshow": ["@storbild/plugin-slideshow@workspace:plugins/slideshow"],
 
     "@storbild/server": ["@storbild/server@workspace:packages/server"],
 

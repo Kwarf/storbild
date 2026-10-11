@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import {
+  assetMetaSchema,
   cueSchema,
   defaultShowSettings,
   idSchema,
@@ -41,7 +42,6 @@ const allKeys: readonly Key[] = [
 /**
  * Writes the parts of `state` named by `keys` (all by default) in one transaction. Collections
  * are rewritten whole: shows have tens of rows, so this is cheap and needs no bookkeeping.
- * `assets` is not persisted until the asset store (M6).
  */
 export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = allKeys) {
   const setMeta = db.query("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)");
@@ -75,6 +75,7 @@ export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = 
           break;
         case "instances":
         case "themes":
+        case "assets":
           rewrite(
             key,
             ["id", "data"],
@@ -106,8 +107,6 @@ export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = 
               JSON.stringify(info),
             ]),
           );
-          break;
-        case "assets":
           break;
       }
     }
@@ -187,7 +186,7 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     activeThemeId: metaValue("activeThemeId", z.string(), ""),
     live: metaValue("live", liveSchema, { blackout: false }),
     timeline: metaValue("timeline", timelineSchema, placeholderTimeline),
-    assets: {},
+    assets: byId(rows("SELECT id, data FROM assets", assetMetaSchema, "asset")),
     settings: metaValue("settings", showSettingsSchema, defaultShowSettings),
   };
 }

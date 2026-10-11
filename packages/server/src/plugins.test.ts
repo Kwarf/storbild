@@ -267,6 +267,52 @@ describe("external plugin (M2 acceptance)", () => {
     expect(Object.keys(plugin("timed")?.types.t ?? {})).not.toContain("duration");
   });
 
+  test("built-in announcement and slideshow load, with their defaults and durations", async () => {
+    expect(plugin("announcement")).toMatchObject({
+      status: "ok",
+      types: { announcement: { kind: "scene", viewer: "sb-announcement" } },
+    });
+    expect(plugin("slideshow")).toMatchObject({
+      status: "ok",
+      settings: { perImageMs: 8_000 },
+      types: { images: { kind: "scene", background: "own", viewer: "sb-slideshow" } },
+    });
+
+    const message = await command("instance.create", {
+      plugin: "announcement",
+      type: "announcement",
+      name: "Doors",
+      config: { message: "Doors open" },
+    });
+    expect(storbild.hub.state.instances[message.body.id as string]?.config).toEqual({
+      message: "Doors open",
+      tone: "info",
+    });
+
+    const images = ["a", "b", "c"].map((c) => c.repeat(64));
+    const refused = await command("instance.create", {
+      plugin: "slideshow",
+      type: "images",
+      name: "None",
+      config: { images: [] },
+    });
+    expect(refused.status).toBe(422);
+    const show = await command("instance.create", {
+      plugin: "slideshow",
+      type: "images",
+      name: "Sponsors",
+      config: { images },
+    });
+    const added = await command("playlist.addItem", { instanceId: show.body.id });
+    const item = () => storbild.hub.state.playlist.items.find((i) => i.id === added.body.id);
+    expect(item()?.resolvedDurationMs).toBe(24_000);
+    await command("instance.update", {
+      id: show.body.id,
+      config: { images, perImageMs: 5_000, fit: "contain" },
+    });
+    expect(item()?.resolvedDurationMs).toBe(15_000);
+  });
+
   test("server part writes plugin state that arrives as a patch on /events", async () => {
     const client = await SseClient.connect(new URL("/events", storbild.viewer.url));
     clients.push(client);

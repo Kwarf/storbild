@@ -24,6 +24,9 @@ function setup() {
   };
 }
 
+/** A well-formed asset ID. */
+const hash = (seed: string) => seed.padEnd(64, "0").replace(/[^0-9a-f]/g, "a");
+
 const markdown = { plugin: "markdown", type: "text", name: "Rules", config: { content: "#" } };
 
 function errorOf(fn: () => unknown): CommandError {
@@ -179,6 +182,15 @@ describe("applyCommand", () => {
     { type: "playlist.addItem", payload: { instanceId: "nope" } },
     { type: "playlist.updateItem", payload: { id: "nope" } },
     { type: "playlist.removeItem", payload: { id: "nope" } },
+    { type: "cue.create", payload: { at: 5_000, action: { type: "take", instanceId: "nope" } } },
+    {
+      type: "cue.create",
+      payload: { at: 5_000, action: { type: "activateTheme", themeId: "nope" } },
+    },
+    { type: "cue.update", payload: { id: "nope", at: 5_000 } },
+    { type: "cue.delete", payload: { id: "nope" } },
+    { type: "asset.update", payload: { id: hash("nope"), name: "x" } },
+    { type: "asset.delete", payload: { id: hash("nope") } },
   ])("$type reports unknown IDs as not_found", (command) => {
     const s = setup();
     expect(errorOf(() => s.run(command)).code).toBe("not_found");
@@ -380,5 +392,143 @@ describe("applyCommand", () => {
     state = applyCommand(state, { type: "instance.create", payload: markdown }, ctx).state;
     const again = () => applyCommand(state, { type: "instance.create", payload: markdown }, ctx);
     expect(errorOf(again).code).toBe("invalid");
+  });
+});
+
+describe("cues", () => {
+  test("cue.create, cue.update and cue.delete", () => {
+    const s = setup();
+    const a = s.run({ type: "instance.create", payload: markdown }) as string;
+    const b = s.run({ type: "instance.create", payload: markdown }) as string;
+    const id = s.run({
+      type: "cue.create",
+      payload: { at: 5_000, action: { type: "take", instanceId: a } },
+    }) as string;
+    expect(s.state.cues).toEqual([{ id, at: 5_000, action: { type: "take", instanceId: a } }]);
+
+    const interrupt = {
+      type: "interrupt",
+      instanceId: b,
+      durationMs: 30_000,
+      below: "dim",
+    } as const;
+    s.run({ type: "cue.update", payload: { id, action: interrupt } });
+    s.run({ type: "cue.update", payload: { id, at: 6_000 } });
+    expect(s.state.cues).toEqual([{ id, at: 6_000, action: interrupt }]);
+
+    s.run({ type: "cue.delete", payload: { id } });
+    expect(s.state.cues).toEqual([]);
+  });
+
+  test("a cue must be in the future and play a scene", () => {
+    const s = setup();
+    const id = s.run({ type: "instance.create", payload: markdown }) as string;
+    const counter = s.run({
+      type: "instance.create",
+      payload: { plugin: "markdown", type: "counter", name: "n", config: { count: 1 } },
+    }) as string;
+    const take = (instanceId: string, at: number) => () =>
+      s.run({ type: "cue.create", payload: { at, action: { type: "take", instanceId } } });
+    expect(errorOf(take(id, 1_000)).code).toBe("invalid");
+    expect(errorOf(take(counter, 5_000)).code).toBe("invalid");
+    const cue = take(id, 5_000)() as string;
+    expect(errorOf(() => s.run({ type: "cue.update", payload: { id: cue, at: 500 } })).code).toBe(
+      "invalid",
+    );
+  });
+
+  test("a fired cue can be deleted but not changed", () => {
+    const s = setup();
+    const instanceId = s.run({ type: "instance.create", payload: markdown }) as string;
+    const state: ShowState = {
+      ...s.state,
+      cues: [{ id: "c1", at: 500, action: { type: "take", instanceId }, fired: true }],
+    };
+    const update = () =>
+      applyCommand(state, { type: "cue.update", payload: { id: "c1", at: 9_000 } }, s.ctx);
+    expect(errorOf(update).code).toBe("invalid");
+    const { state: after } = applyCommand(
+      state,
+      { type: "cue.delete", payload: { id: "c1" } },
+      s.ctx,
+    );
+    expect(after.cues).toEqual([]);
+  });
+
+  test("activateTheme cues need an existing theme", () => {
+    const s = setup();
+    const themeId = s.state.activeThemeId;
+    s.run({
+      type: "cue.create",
+      payload: { at: 5_000, action: { type: "activateTheme", themeId } },
+    });
+    expect(s.state.cues).toHaveLength(1);
+  });
+});
+
+describe("assets", () => {
+  const meta = (id: string) => ({
+    id,
+    name: "logo.png",
+    mimeType: "image/png",
+    size: 10,
+    width: 4,
+    height: 2,
+    createdAt: 0,
+  });
+
+  test("asset.add registers an asset once; asset.update renames it", () => {
+    const s = setup();
+    const id = hash("1");
+    s.run({ type: "asset.add", payload: meta(id) });
+    s.run({ type: "asset.add", payload: { ...meta(id), name: "again.png", createdAt: 5 } });
+    expect(s.state.assets[id]).toEqual(meta(id));
+    s.run({ type: "asset.update", payload: { id, name: "Logo" } });
+    expect(s.state.assets[id]?.name).toBe("Logo");
+  });
+
+  test("the admin command schema does not accept asset.add", () => {
+    const parsed = commandSchema.safeParse({ type: "asset.add", payload: meta(hash("1")) });
+    expect(parsed.success).toBe(false);
+  });
+
+  test("asset.delete is refused while an instance or theme uses the asset", () => {
+    const s = setup();
+    const [inConfig, inBackground, inTheme, unused] = ["1", "2", "3", "4"].map(hash) as [
+      string,
+      string,
+      string,
+      string,
+    ];
+    for (const id of [inConfig, inBackground, inTheme, unused]) {
+      s.run({ type: "asset.add", payload: meta(id) });
+    }
+    s.run({
+      type: "instance.create",
+      payload: { ...markdown, name: "Logo", config: { content: "x", title: inConfig } },
+    });
+    s.run({
+      type: "instance.create",
+      payload: { ...markdown, background: { assetId: inBackground, fit: "cover" } },
+    });
+    const theme = s.state.themes[s.state.activeThemeId];
+    if (!theme) throw new Error("no theme");
+    const state: ShowState = {
+      ...s.state,
+      themes: {
+        [theme.id]: {
+          ...theme,
+          fonts: { ...theme.fonts, body: { family: "X", assetIds: [inTheme] } },
+        },
+      },
+    };
+    const remove = (id: string) =>
+      applyCommand(state, { type: "asset.delete", payload: { id } }, s.ctx);
+    const error = errorOf(() => remove(inConfig));
+    expect(error.code).toBe("invalid");
+    expect(error.message).toContain('instance "Logo"');
+    expect(errorOf(() => remove(inBackground)).code).toBe("invalid");
+    expect(errorOf(() => remove(inTheme)).message).toContain("theme");
+    expect(Object.keys(remove(unused).state.assets)).toEqual([inConfig, inBackground, inTheme]);
   });
 });

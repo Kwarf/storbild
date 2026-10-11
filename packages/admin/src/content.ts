@@ -105,12 +105,13 @@ export function move<T>(list: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
-/** A `datetime-local` value in local time, or "" for none. */
-export function toLocalInput(epochMs: number | undefined): string {
+/** A `datetime-local` value in local time, or "" for none. Seconds are kept if asked. */
+export function toLocalInput(epochMs: number | undefined, { seconds = false } = {}): string {
   if (epochMs === undefined) return "";
   const date = new Date(epochMs);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const minutes = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return seconds ? `${minutes}:${pad(date.getSeconds())}` : minutes;
 }
 
 /** Epoch ms from a `datetime-local` value; `undefined` when blank or invalid. */
