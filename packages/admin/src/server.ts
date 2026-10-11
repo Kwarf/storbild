@@ -81,7 +81,7 @@ ${head(
   "Log in · Storbild",
   fontBase,
   `<style>
-main { max-width: 320px; margin: 18vh auto 0; padding: 0 24px; }
+main { max-width: 320px; margin: 0 auto; padding: 18vh 24px 0; }
 h1 { font-size: var(--sb-text-xl); font-weight: var(--sb-weight-strong); margin: 0 0 24px; letter-spacing: -0.01em; }
 label { display: block; font-size: var(--sb-text-sm); color: var(--sb-muted); margin: 0 0 4px; }
 input {
