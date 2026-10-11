@@ -272,24 +272,24 @@ describe("resolveTimeline: live control", () => {
     const y = s.scene("Y");
     s.at(15).run({
       type: "live.interrupt",
-      payload: { instanceId: y, durationMs: 50, dimBelow: true },
+      payload: { instanceId: y, durationMs: 50, below: "dim" },
     });
     expect(s.resolve(20)).toEqual({
       mode: "override",
       // B stays on air under the interrupt, past its own end at 30.
       main: on(s, "B", 10, 65),
       next: upNext(s, "C", 65),
-      interrupt: { instanceId: y, startedAt: 15, endsAt: 65, dimBelow: true },
+      interrupt: { instanceId: y, startedAt: 15, endsAt: 65, below: "dim" },
       blackout: false,
     });
     expect(s.resolve(65)).toMatchObject({ mode: "auto", main: on(s, "C", 65, 95) });
     expect(s.resolve(65).interrupt).toBeUndefined();
   });
 
-  test("dimBelow defaults to false", () => {
+  test("an interrupt hides what is below by default", () => {
     const s = setup(abc());
     s.at(15).run({ type: "live.interrupt", payload: { instanceId: s.scene("Y") } });
-    expect(s.resolve(20).interrupt?.dimBelow).toBe(false);
+    expect(s.resolve(20).interrupt?.below).toBe("hide");
   });
 
   test("dismissing an interrupt early continues with the next item now", () => {

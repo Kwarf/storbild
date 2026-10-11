@@ -159,12 +159,23 @@ describe.skipIf(!enabled)("admin", () => {
         .locator('sb-strip .mode[data-mode="interrupt"]', { hasText: "until dismissed" })
         .waitFor();
       await onScreen("interrupt", "Fire exit").waitFor();
-      await screen.locator("sb-compositor .dim.on").waitFor({ state: "attached" });
+      // By default the theme background covers the scene and overlays below.
+      await screen.locator("sb-compositor .cover.on").waitFor({ state: "attached" });
+      expect(await screen.locator("sb-compositor .dim.on").count()).toBe(0);
       await shot(admin, "live-interrupt");
 
       await admin.getByRole("button", { name: "Dismiss" }).click();
       await admin.locator('sb-strip .mode[data-mode="rotation"]').waitFor();
       await screen.locator("sb-compositor .interrupt > .scene").waitFor({ state: "detached" });
+      await screen.locator("sb-compositor .cover.on").waitFor({ state: "detached" });
+
+      // Dimming instead is a choice.
+      await admin.getByLabel("Beneath the announcement").selectOption({ label: "Dim the screen" });
+      await admin.getByRole("button", { name: "Interrupt" }).click();
+      await screen.locator("sb-compositor .dim.on").waitFor({ state: "attached" });
+      expect(storbild.hub.state.live.interrupt?.below).toBe("dim");
+      await admin.getByRole("button", { name: "Dismiss" }).click();
+      await screen.locator("sb-compositor .dim.on").waitFor({ state: "detached" });
     },
     TIMEOUT,
   );

@@ -50,7 +50,7 @@ function fullState(): ShowState {
         { id: "p1", instanceId: "i1", enabled: true, activeFrom: 1, activeUntil: 2 },
       ],
     },
-    cues: [{ id: "c1", at: 9000, action: { type: "interrupt", instanceId: "i1", dimBelow: true } }],
+    cues: [{ id: "c1", at: 9000, action: { type: "interrupt", instanceId: "i1", below: "dim" } }],
     overlays: [
       { instanceId: "i2", slot: "bottom-right", order: 1, visible: true },
       { instanceId: "i1", slot: "top", order: 0, visible: false },
@@ -70,7 +70,7 @@ function fullState(): ShowState {
     activeThemeId: "theme2",
     live: {
       main: { instanceId: "i1", itemId: "p1", startedAt: 10, endsAt: 20 },
-      interrupt: { instanceId: "i1", startedAt: 12, dimBelow: true },
+      interrupt: { instanceId: "i1", startedAt: 12, below: "dim" },
       blackout: true,
     },
     timeline: {
@@ -133,6 +133,49 @@ describe("persistence", () => {
     expect(loaded?.live).toEqual({ blackout: false });
     expect(loaded?.playlist.anchorItemId).toBeUndefined();
     expect(logged).toEqual([]);
+  });
+
+  test("an interrupt's old dimBelow flag migrates to below, keeping its meaning", () => {
+    const dir = mkdtempSync(join(tmpdir(), "storbild-"));
+    try {
+      const path = join(dir, "storbild.db");
+      const db = openDatabase(path);
+      saveState(db, fullState());
+      // Rewind to the schema before the change and store the old shape.
+      const version = (db.query("PRAGMA user_version").get() as { user_version: number })
+        .user_version;
+      const old = (dimBelow: boolean) => ({ instanceId: "i1", startedAt: 12, dimBelow });
+      db.run("UPDATE meta SET value = ? WHERE key = 'live'", [
+        JSON.stringify({ interrupt: old(true), blackout: false }),
+      ]);
+      db.run("UPDATE meta SET value = ? WHERE key = 'timeline'", [
+        JSON.stringify({ mode: "override", interrupt: old(false), blackout: false }),
+      ]);
+      db.run("UPDATE cues SET data = ?", [
+        JSON.stringify({
+          id: "c1",
+          at: 9000,
+          action: { type: "interrupt", instanceId: "i1", dimBelow: true },
+        }),
+      ]);
+      db.run(`PRAGMA user_version = ${version - 1}`);
+      db.close();
+
+      const reopened = openDatabase(path);
+      const logged: string[] = [];
+      const loaded = loadState(reopened, (message) => logged.push(message));
+      reopened.close();
+      expect(logged).toEqual([]);
+      expect(loaded?.live.interrupt).toEqual({ instanceId: "i1", startedAt: 12, below: "dim" });
+      expect(loaded?.timeline.interrupt?.below).toBe("show");
+      expect(loaded?.cues[0]?.action).toEqual({
+        type: "interrupt",
+        instanceId: "i1",
+        below: "dim",
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
   });
 
   test("tables reject invalid JSON", () => {

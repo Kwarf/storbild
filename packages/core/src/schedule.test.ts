@@ -221,7 +221,7 @@ describe("settle: cues", () => {
       instanceId: x,
       startedAt: 14_000,
       endsAt: 24_000,
-      dimBelow: false,
+      below: "hide",
     });
     expect(s.state.cues.map((c) => [c.id, c.fired ?? false])).toEqual([
       ["late", false],

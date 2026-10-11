@@ -49,6 +49,20 @@ const migrations: string[] = [
     expires_at INTEGER NOT NULL
   ) STRICT;
   `,
+  // An interrupt's `dimBelow` flag becomes `below` (ADR 0008), keeping its meaning: true is
+  // "dim", false is "show".
+  `
+  UPDATE meta SET value = json_set(
+    json_remove(value, '$.interrupt.dimBelow'),
+    '$.interrupt.below',
+    CASE json_extract(value, '$.interrupt.dimBelow') WHEN 1 THEN 'dim' ELSE 'show' END
+  ) WHERE key IN ('live', 'timeline') AND json_type(value, '$.interrupt.dimBelow') IS NOT NULL;
+  UPDATE cues SET data = json_set(
+    json_remove(data, '$.action.dimBelow'),
+    '$.action.below',
+    CASE json_extract(data, '$.action.dimBelow') WHEN 1 THEN 'dim' ELSE 'show' END
+  ) WHERE json_type(data, '$.action.dimBelow') IS NOT NULL;
+  `,
 ];
 
 /** Opens (creating if needed) and migrates the database. `path` may be ":memory:". */

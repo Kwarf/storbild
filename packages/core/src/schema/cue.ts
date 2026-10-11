@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { durationMsSchema, epochMsSchema, idSchema } from "./common.ts";
+import { interruptBelowSchema } from "./timeline.ts";
 
 export const cueActionSchema = z.discriminatedUnion("type", [
   z.object({
@@ -11,7 +12,7 @@ export const cueActionSchema = z.discriminatedUnion("type", [
     type: z.literal("interrupt"),
     instanceId: idSchema,
     durationMs: durationMsSchema.optional(),
-    dimBelow: z.boolean().optional(),
+    below: interruptBelowSchema.optional(),
   }),
   z.object({ type: z.literal("activateTheme"), themeId: idSchema }),
 ]);

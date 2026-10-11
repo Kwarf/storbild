@@ -170,7 +170,7 @@ interface Cue {
   at: number;                                  // epoch ms, server time
   action:
     | { type: "take"; instanceId: string; durationMs?: number }
-    | { type: "interrupt"; instanceId: string; durationMs?: number; dimBelow?: boolean }
+    | { type: "interrupt"; instanceId: string; durationMs?: number; below?: "show" | "dim" | "hide" }
     | { type: "activateTheme"; themeId: string };
   fired?: boolean;
 }
@@ -187,7 +187,7 @@ interface Timeline {
   mode: "auto" | "override";   // override = a manual take or interrupt is active
   main?: { instanceId: string; itemId?: string; startedAt: number; endsAt?: number }; // absent: background only
   next?: { instanceId: string; itemId?: string; startsAt: number };
-  interrupt?: { instanceId: string; startedAt: number; endsAt?: number; dimBelow: boolean };
+  interrupt?: { instanceId: string; startedAt: number; endsAt?: number; below: "show" | "dim" | "hide" };
   blackout: boolean;
 }
 ```
@@ -197,7 +197,7 @@ Live control is the input that `resolveTimeline` combines with the rotation:
 ```ts
 interface Live {
   main?: { instanceId: string; itemId?: string; startedAt: number; endsAt?: number };  // a take, or the scene frozen under an interrupt
-  interrupt?: { instanceId: string; startedAt: number; endsAt?: number; dimBelow: boolean };
+  interrupt?: { instanceId: string; startedAt: number; endsAt?: number; below: "show" | "dim" | "hide" };
   blackout: boolean;
 }
 ```
@@ -205,7 +205,7 @@ interface Live {
 Semantics:
 
 - **Take now** replaces `main` for its duration, or until resumed when it has none. Then the rotation continues with the item after the one it replaced.
-- **Interrupt** shows on the interrupt layer above everything except blackout. It ends after its duration, or when dismissed if it has none. While it is active the rotation is paused: the scene on air stays frozen beneath. When it ends, the rotation continues with the next item, not by restarting the interrupted one. (This is a deliberate simplification; record it in an ADR if it changes.)
+- **Interrupt** shows on the interrupt layer above everything except blackout. By default the theme background covers the scene and overlays beneath it, so any scene works as an announcement; `below` can instead dim them or leave them visible, for interrupts that draw their own panel ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md)). It ends after its duration, or when dismissed if it has none. While it is active the rotation is paused: the scene on air stays frozen beneath. When it ends, the rotation continues with the next item, not by restarting the interrupted one. (This is a deliberate simplification; record it in an ADR if it changes.)
 - **Blackout** always wins. It renders pure black, and the timeline keeps advancing underneath.
 - **The rotation is deterministic.** It is anchored at `playlist.anchorAt` and `playlist.anchorItemId`, and the position at time *t* is computed from the anchor and the resolved durations of the eligible items. The anchor is only moved when the rotation's content changes or by a take or interrupt. This makes `resolveTimeline(state, t)` a **pure function** in `packages/core`, used by both the server (authoritative) and the viewer (to switch on time and keep going during outages).
 - `next` is announced as soon as the current scene starts, whenever the following scene is known.
@@ -433,7 +433,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   1. theme background
   2. `main` (current scene, plus the incoming scene during a transition)
   3. overlay slots
-  4. interrupt (optionally dims the layers below)
+  4. interrupt, beneath which the layers below are covered with the theme background (`hide`, the default), dimmed (`dim`) or left visible (`show`) ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md))
   5. blackout
 - **Transitions.** Owned by the compositor. The first version has a crossfade (800 ms); more can come later. At most two scenes are visible at once. Scenes are keyed by instance, so an instance that stays on air is updated in place, never remounted.
 - **Prefetch.** When `timeline.next` appears, the viewer loads the plugin module, creates the element and awaits `prepare()` (image decode, fonts) before `startsAt`.

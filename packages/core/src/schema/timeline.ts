@@ -11,12 +11,20 @@ export const timelineMainSchema = z.object({
 });
 export type TimelineMain = z.infer<typeof timelineMainSchema>;
 
+/**
+ * What the screen shows beneath an interrupt (ADR 0008): `hide` covers the layers below with
+ * the theme background, so the interrupt looks like a full-screen scene; `dim` darkens them;
+ * `show` leaves them as they are, for interrupts that draw their own panel.
+ */
+export const interruptBelowSchema = z.enum(["show", "dim", "hide"]);
+export type InterruptBelow = z.infer<typeof interruptBelowSchema>;
+
 export const timelineInterruptSchema = z.object({
   instanceId: idSchema,
   startedAt: epochMsSchema,
   /** Absent while the interrupt holds until it is dismissed. */
   endsAt: epochMsSchema.optional(),
-  dimBelow: z.boolean(),
+  below: interruptBelowSchema,
 });
 export type TimelineInterrupt = z.infer<typeof timelineInterruptSchema>;
 

@@ -1,4 +1,4 @@
-import { type Command, isPlayableScene, type ShowState } from "@storbild/core";
+import { type Command, type InterruptBelow, isPlayableScene, type ShowState } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
 import { send } from "./api.ts";
@@ -8,6 +8,13 @@ import { onAir } from "./status.ts";
 import { controls } from "./styles.ts";
 
 type Action = "announce" | "take" | "blackout";
+
+/** What the screen shows beneath an announcement (ADR 0008). */
+const belowOptions: [InterruptBelow, string][] = [
+  ["hide", "Cover the screen"],
+  ["dim", "Dim the screen"],
+  ["show", "Over the screen"],
+];
 
 /**
  * The Live panel (DESIGN.md §8.2): announce (an interrupt), take now, resume and blackout.
@@ -64,14 +71,11 @@ export class LivePanel extends LitElement {
         flex: 1 1 240px;
         max-width: 360px;
       }
+      select.below {
+        flex: 0 0 auto;
+      }
       input[type="text"] {
         width: 128px;
-      }
-      label.check {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        font-size: var(--sb-text-sm);
       }
       .active {
         padding: 8px 10px;
@@ -94,7 +98,7 @@ export class LivePanel extends LitElement {
   declare ctx: ViewerContext | undefined;
   declare errors: Partial<Record<Action, string>>;
   declare busy: Action | undefined;
-  declare announce: { instanceId: string; duration: string; dim: boolean };
+  declare announce: { instanceId: string; duration: string; below: InterruptBelow };
   declare takeId: string;
   #takeDuration = "";
   #ticker: number | undefined;
@@ -103,7 +107,7 @@ export class LivePanel extends LitElement {
     super();
     this.errors = {};
     this.busy = undefined;
-    this.announce = { instanceId: "", duration: "", dim: true };
+    this.announce = { instanceId: "", duration: "", below: "hide" };
     this.takeId = "";
   }
 
@@ -148,19 +152,19 @@ export class LivePanel extends LitElement {
               };
             }}
           />
-          <label class="check">
-            <input
-              type="checkbox"
-              .checked=${this.announce.dim}
-              @change=${(event: Event) => {
-                this.announce = {
-                  ...this.announce,
-                  dim: (event.target as HTMLInputElement).checked,
-                };
-              }}
-            />
-            Dim below
-          </label>
+          <select
+            class="below"
+            aria-label="Beneath the announcement"
+            @change=${(event: Event) => {
+              const below = (event.target as HTMLSelectElement).value as InterruptBelow;
+              this.announce = { ...this.announce, below };
+            }}
+          >
+            ${belowOptions.map(
+              ([value, label]) =>
+                html`<option value=${value} ?selected=${value === this.announce.below}>${label}</option>`,
+            )}
+          </select>
           <button
             class="primary"
             ?disabled=${!this.announce.instanceId || this.busy === "announce"}
@@ -291,7 +295,7 @@ export class LivePanel extends LitElement {
       type: "live.interrupt",
       payload: {
         instanceId: this.announce.instanceId,
-        dimBelow: this.announce.dim,
+        below: this.announce.below,
         ...(durationMs !== undefined && { durationMs }),
       },
     });

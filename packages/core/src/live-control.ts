@@ -1,6 +1,6 @@
 import type { Live } from "./schema/live.ts";
 import type { ShowState } from "./schema/state.ts";
-import type { TimelineMain } from "./schema/timeline.ts";
+import type { InterruptBelow, TimelineMain } from "./schema/timeline.ts";
 import { resolveTimeline } from "./timeline.ts";
 
 // Live control (DESIGN.md §4.4, ADR 0006). Each function takes the time the action happens,
@@ -13,7 +13,8 @@ export interface TakeOptions {
 }
 
 export interface InterruptOptions extends TakeOptions {
-  dimBelow?: boolean | undefined;
+  /** Defaults to `hide`: the theme background covers what is below. */
+  below?: InterruptBelow | undefined;
 }
 
 /** Replaces the main layer with an instance; the rotation continues after it. */
@@ -41,7 +42,7 @@ export function interrupt(state: ShowState, options: InterruptOptions, at: numbe
       instanceId: options.instanceId,
       startedAt: at,
       ...(endsAt !== undefined && { endsAt }),
-      dimBelow: options.dimBelow ?? false,
+      below: options.below ?? "hide",
     },
   };
   if (current) {

@@ -262,7 +262,7 @@ describe.skipIf(!enabled)("viewer", () => {
     "an interrupt shows above main and dims it; blackout covers everything",
     async () => {
       const d = await probe("D");
-      await command("live.interrupt", { instanceId: d, dimBelow: true });
+      await command("live.interrupt", { instanceId: d, below: "dim" });
       await forAll(async (page) => {
         await scene(page, "interrupt").locator(".probe", { hasText: "D" }).waitFor();
         await page.locator("sb-compositor .dim.on").waitFor({ state: "attached" });

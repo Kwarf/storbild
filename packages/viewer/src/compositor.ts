@@ -14,8 +14,8 @@ const MAX_WAIT_MS = 60_000;
 
 /**
  * Renders a show state on a 1920×1080 canvas (DESIGN.md §7). Layers, bottom to top: theme
- * background, main scene, overlay slots (M8), interrupt (optionally dimming what is below),
- * blackout. The admin preview (M5) reuses it, fed from its own stream.
+ * background, main scene, overlay slots (M8), interrupt, blackout. Beneath the interrupt, a
+ * dim or a cover of the theme background hides what is below, as its `below` asks (ADR 0008). The admin preview (M5) reuses it, fed from its own stream.
  *
  * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
  * `timeline`, and is resolved again at the next boundary. So the screen switches at
@@ -50,6 +50,7 @@ export class Compositor extends LitElement {
       transition: background-color ${TRANSITION_MS}ms ease-in-out;
     }
     .dim,
+    .cover,
     .blackout {
       background: #000;
       opacity: 0;
@@ -57,7 +58,10 @@ export class Compositor extends LitElement {
       transition: opacity ${TRANSITION_MS}ms ease-in-out;
     }
     .dim.on {
-      opacity: 0.6;
+      opacity: 0.75;
+    }
+    .cover.on {
+      opacity: 1;
     }
     .blackout.on {
       opacity: 1;
@@ -81,11 +85,16 @@ export class Compositor extends LitElement {
 
   override render() {
     const timeline = this.#timeline;
+    const below = timeline?.interrupt?.below;
     return html`
       <div class="layer background" style="background-color: ${backgroundOf(this.state)}"></div>
       <div class="layer main" part="main"></div>
       <div class="layer overlays" part="overlays"></div>
-      <div class="layer dim ${timeline?.interrupt?.dimBelow ? "on" : ""}"></div>
+      <div class="layer dim ${below === "dim" ? "on" : ""}"></div>
+      <div
+        class="layer cover ${below === "hide" ? "on" : ""}"
+        style="background-color: ${backgroundOf(this.state)}"
+      ></div>
       <div class="layer interrupt" part="interrupt"></div>
       <div class="layer blackout ${timeline?.blackout ? "on" : ""}" part="blackout"></div>
     `;

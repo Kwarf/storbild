@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { durationMsSchema, epochMsSchema, idSchema } from "./schema/common.ts";
 import { instanceBackgroundSchema } from "./schema/instance.ts";
+import { interruptBelowSchema } from "./schema/timeline.ts";
 
 function command<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({ type: z.literal(type), payload });
@@ -65,7 +66,8 @@ export const commandSchema = z.discriminatedUnion("type", [
     z.object({
       instanceId: idSchema,
       durationMs: durationMsSchema.optional(),
-      dimBelow: z.boolean().optional(),
+      /** Defaults to `hide`. */
+      below: interruptBelowSchema.optional(),
     }),
   ),
   command("live.clearInterrupt", z.object({})),

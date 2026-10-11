@@ -278,11 +278,11 @@ describe("scheduler", () => {
     expect(storbild.hub.state.timeline).toMatchObject({ mode: "auto", main: { itemId: b } });
     expect(storbild.hub.state.live.main).toBeUndefined();
 
-    await command("live.interrupt", { instanceId: x, dimBelow: true });
+    await command("live.interrupt", { instanceId: x, below: "dim" });
     await command("live.blackout", { on: true });
     expect(storbild.hub.state.timeline).toMatchObject({
       mode: "override",
-      interrupt: { instanceId: x, dimBelow: true },
+      interrupt: { instanceId: x, below: "dim" },
       blackout: true,
     });
     await command("live.resume", {});
