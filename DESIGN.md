@@ -84,8 +84,8 @@ storbild/
 ├── DESIGN.md                  # this document
 ├── docs/
 │   ├── decisions/             # short ADRs for decisions made during implementation
-│   ├── plugin-authoring.md    # written in M10
-│   └── deployment.md          # written in M10
+│   ├── plugin-authoring.md    # written in M10b
+│   └── deployment.md          # written in M10b
 ├── packages/
 │   ├── core/                  # pure, shared logic: state types, timeline resolution,
 │   │                          # patch helpers, clock-offset math. No I/O. Used by
@@ -458,7 +458,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
   - A watchdog reloads the page if there's no message or heartbeat for 60 s, but only if the server answers `/time`. Otherwise it reopens the stream and keeps waiting, so a kiosk is never left on an error page.
   - A failing scene never stops the show. If `prepare()` fails, the scene is shown anyway; if its module can't load, only the layers below show.
-  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. A screen clock that trails just behind a fresh anchor resolves at the anchor ([ADR 0013](docs/decisions/0013-screen-clock-lag-at-the-anchor.md)). On `visibilitychange` it re-resolves at once. M10 adds offline caching.
+  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. A screen clock that trails just behind a fresh anchor resolves at the anchor ([ADR 0013](docs/decisions/0013-screen-clock-lag-at-the-anchor.md)). On `visibilitychange` it re-resolves at once. M10a adds offline caching.
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
 - **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.
@@ -513,12 +513,12 @@ Each milestone is meant to be planned and implemented as a separate unit of work
 ```
 M0 ─► M1 ─► M2 ─┬─► M3 ─┬─► M4 ─────────────────────────┐
                 │       ├─► M7 (theming)                 │
-                │       └─► M8 (overlays)                ├─► M10 (hardening & release)
+                │       └─► M8 (overlays)                ├─► M10a (resilience, export) ─► M10b (ops, release)
                 └─► M5 ─► M6a (forms, pages) ─► M6b ─────┤   M6b: assets, schedule, announce
                     M9 (built-in plugins) ───────────────┘   (M9 needs M2+M3; grows alongside)
 ```
 
-M6 is split into M6a and M6b ([ADR 0009](docs/decisions/0009-split-m6.md)).
+M6 is split into M6a and M6b ([ADR 0009](docs/decisions/0009-split-m6.md)), and M10 into M10a and M10b ([ADR 0016](docs/decisions/0016-split-m10.md)).
 
 ### M0 — Repository foundation
 
@@ -567,7 +567,7 @@ Mechanics (pure reducer in core, diff-based patches, table layout, resume rules)
 
 **Done when:** a plugin in a separate directory outside the repo, depending only on the SDK, loads with full type checking. Its settings and instances validate. A server part can write plugin state and the resulting patch appears on `/events`.
 
-Package shape, bundling, module serving, state representation and failure handling are specified in [ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md). Reloading plugins from `STORBILD_PLUGIN_PATHS` on change is deferred to M10.
+Package shape, bundling, module serving, state representation and failure handling are specified in [ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md). Reloading plugins from `STORBILD_PLUGIN_PATHS` on change is deferred to M10b.
 
 ### M3 — Viewer
 
@@ -683,17 +683,28 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 
 Markdown rendering, plugin dependencies, the countdown, the Wi-Fi QR code and its editor, and the deferral of `now-playing` are specified in [ADR 0015](docs/decisions/0015-built-in-plugins.md).
 
-### M10 — Hardening, operations and release
+### M10a — Resilience and show portability
 
-**Depends on:** all the above.
+**Depends on:** all of M0–M9.
 
 - **Offline resilience.** A service worker caches the viewer shell, plugin modules and referenced assets. During an outage the viewer continues the rotation via `resolveTimeline` from its last state, and resyncs on reconnect.
 - **Show export and import.** JSON plus an assets zip, for preparing a show ahead of the party.
+
+**Done when:** a screen keeps playing through a network outage and a server restart and resyncs afterwards, and an exported show imports into a fresh install and plays the same.
+
+**Deferred:** deployment, plugin authoring and the soak test (M10b).
+
+### M10b — Operations and release
+
+**Depends on:** M10a.
+
 - **Deployment.** A systemd unit and an optional Docker image. `docs/deployment.md` covers Caddy (two hosts, basic auth on screen), DNS, kiosk setup (`deploy/kiosk/`), and pinning or disabling Chromium updates.
-- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk`. Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
-- **Soak test.** 24 h unattended on target-like hardware, with a forced network outage and a server restart during the run.
+- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk` (check the npm scope first, §11). Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
+- **Soak test, last.** 24 h unattended on target-like hardware, set up from the docs, with a forced network outage and a server restart during the run.
 
 **Done when:** a fresh VPS and kiosk can be set up from the docs alone, and the soak test passes.
+
+The split and the M10 items deferred by earlier ADRs are specified in [ADR 0016](docs/decisions/0016-split-m10.md).
 
 ---
 
