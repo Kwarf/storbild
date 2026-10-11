@@ -13,6 +13,7 @@ The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer)
 - `bun install`
 - `bun run dev` — starts both Hono apps (viewer :3000, admin :3001) with watch mode. Config comes from `STORBILD_*` env vars or `.env`; see `.env.example`
 - `bun test` — single file: `bun test path/to/file.test.ts`; single test: `bun test -t "name pattern"`
+- `STORBILD_E2E=1 bun test packages/server/e2e` — viewer e2e tests in Chromium via Playwright (skipped without the env var). Install the browser once with `bunx playwright install chromium` in `packages/server`
 - `bun run typecheck` — `tsc --noEmit` in every workspace (each package has its own `tsconfig.json`)
 - `bun run lint` (Biome check), `bun run format` (Biome format). CI runs `bunx biome ci .`
 
@@ -28,6 +29,7 @@ Bun workspace monorepo (DESIGN.md §3): `packages/core` (pure shared logic), `pa
 - **Server is the only writer.** Every change is a Zod-validated command (`POST /api/commands`), applied by a reducer, which bumps `revision`, persists to SQLite and broadcasts an RFC 6902 JSON Patch over SSE. Clients never mutate state directly.
 - **Viewers render from state, on the client.** SSE sends a snapshot and then patches. `Last-Event-ID` resumes from a ring buffer, and the server falls back to a snapshot when the buffer has rolled past.
 - **Time-based, not tick-based.** State carries absolute server-time start/end times. `resolveTimeline(state, t)` in `packages/core` is a pure function used by both the server (authoritative) and the viewer (to keep running through outages). Resolved durations are computed on the server and stored in state, so the viewer never needs plugin server code.
+- **Viewer** (`packages/viewer`): `SyncClient` (SSE + watchdog), `ClockSync`, and `<sb-compositor>` with one `SceneLayer` per scene layer. The server bundles `@storbild/viewer/main` and serves it at `/app/<hash>/`, with lit/zod/SDK from the import map ([ADR 0005](docs/decisions/0005-viewer.md)). Until M4, `interimTimeline` in core puts the first playlist item on air.
 - **Plugins** (`definePlugin`) contribute instance types (`scene` or `overlay`), each with a Zod config schema. Each plugin has three faces: Lit viewer elements, admin forms generated via `z.toJSONSchema()` (or a custom editor), and an optional in-process server part. A plugin package's `exports["."]` is its definition (server only), and `package.json` `storbild.viewer` names its browser entry. The SDK has matching subpaths: `@storbild/plugin-sdk` (no DOM), `/viewer` (Lit) and `/build`. The host (`packages/server/src/plugins/`) bundles both faces with `Bun.build`, mapping `lit`, `zod` and the SDK to its own copies; in the browser they resolve through `/importmap.json`. Plugin modules are served at `/plugins/<id>/<version>/…` ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 - **Compositor owns layers and transitions.** Layers from bottom to top: theme background, main scene, overlay slots, interrupt, blackout. Scenes are transparent by default and don't implement transitions.
 

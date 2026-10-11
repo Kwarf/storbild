@@ -3,7 +3,7 @@ import { streamSSE } from "hono/streaming";
 import type { PatchEvent, StateHub } from "./state-hub.ts";
 
 export interface StreamOptions {
-  /** Interval between `: ping` comments. */
+  /** Interval between `ping` events. */
   heartbeatMs?: number;
   /** A client this many messages behind is dropped; it resumes on reconnect. */
   maxQueue?: number;
@@ -11,6 +11,12 @@ export interface StreamOptions {
 
 const patchMessage = (event: PatchEvent) =>
   `event: patch\nid: ${event.revision}\ndata: ${JSON.stringify(event.ops)}\n\n`;
+
+/**
+ * A named event rather than an SSE comment, so the browser's watchdog sees it. It has no `id`,
+ * which leaves the client's last event ID alone; the data must be non-empty to be dispatched.
+ */
+const pingMessage = "event: ping\ndata: 1\n\n";
 
 /**
  * Streams the show state per DESIGN.md §5.1: `retry`, then a snapshot or the missed patches,
@@ -34,7 +40,7 @@ export function streamState(
     const { start, unsubscribe } = hub.subscribe(c.req.header("Last-Event-ID"), (event) =>
       push(patchMessage(event)),
     );
-    const heartbeat = setInterval(() => push(": ping\n\n"), heartbeatMs);
+    const heartbeat = setInterval(() => push(pingMessage), heartbeatMs);
     stream.onAbort(() => wake?.());
 
     try {

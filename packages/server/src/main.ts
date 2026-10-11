@@ -15,6 +15,7 @@ import type { StreamOptions } from "./sse.ts";
 import { StateHub } from "./state-hub.ts";
 import { loadState, saveState } from "./store.ts";
 import { createViewerApp } from "./viewer-app.ts";
+import { getViewerBundle } from "./viewer-page.ts";
 
 export interface Storbild {
   viewer: Bun.Server<undefined>;
@@ -69,6 +70,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   // Plugin status, versions and module URLs may differ from the stored show. Applying them as
   // a new revision means viewers resuming at the stored revision receive the change.
   hub.update((state) => reconcilePlugins(state, catalog));
+  const viewerBundle = await getViewerBundle();
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
 
@@ -79,7 +81,13 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     hostname: config.host,
     port: config.viewer.port,
     idleTimeout,
-    fetch: createViewerApp({ hub, now, modules: registry, ...(stream && { stream }) }).fetch,
+    fetch: createViewerApp({
+      hub,
+      now,
+      modules: registry,
+      viewer: viewerBundle,
+      ...(stream && { stream }),
+    }).fetch,
   });
   const admin = Bun.serve({
     hostname: config.host,

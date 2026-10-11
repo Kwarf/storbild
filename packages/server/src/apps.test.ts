@@ -7,13 +7,46 @@ import { createAdminApp } from "./admin-app.ts";
 import { type Storbild, start } from "./main.ts";
 import { createTestHub } from "./testing.ts";
 import { createViewerApp } from "./viewer-app.ts";
+import { getViewerBundle } from "./viewer-page.ts";
+
+const viewer = await getViewerBundle();
 
 describe("viewer app", () => {
-  const app = createViewerApp({ hub: createTestHub(), now: () => 1234 });
+  const importMap = { imports: { lit: "/vendor/abc/lit/index.js" } };
+  const app = createViewerApp({
+    hub: createTestHub(),
+    now: () => 1234,
+    viewer,
+    modules: {
+      vendor: { hash: "abc", files: new Map(), specifiers: {} },
+      plugins: new Map(),
+      importMap,
+    },
+  });
 
-  test("serves the viewer root", async () => {
+  test("serves the viewer page uncached, with the import map inline", async () => {
     const res = await app.request("/");
     expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toStartWith("text/html");
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    const html = await res.text();
+    expect(html).toContain(`<script type="importmap">${JSON.stringify(importMap)}</script>`);
+    expect(html).toContain(`<script type="module" src="/app/${viewer.hash}/viewer.js">`);
+    expect(html).toContain("<sb-viewer></sb-viewer>");
+  });
+
+  test("serves the viewer bundle immutably, with lit left to the import map", async () => {
+    const res = await app.request(`/app/${viewer.hash}/viewer.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toStartWith("text/javascript");
+    expect(res.headers.get("Cache-Control")).toContain("immutable");
+    const code = await res.text();
+    expect(code).toMatch(/from\s*"lit"/);
+  });
+
+  test("a stale bundle hash is a 404", async () => {
+    expect((await app.request("/app/000000000000/viewer.js")).status).toBe(404);
+    expect((await app.request(`/app/${viewer.hash}/missing.js`)).status).toBe(404);
   });
 
   test("serves the server time uncached", async () => {
@@ -104,7 +137,7 @@ describe("start", () => {
 
   test("serves both apps on separate ports", async () => {
     expect(storbild.viewer.port).not.toBe(storbild.admin.port);
-    expect(await (await fetch(storbild.viewer.url)).text()).toBe("Storbild viewer");
+    expect(await (await fetch(storbild.viewer.url)).text()).toContain("<sb-viewer>");
     expect(await (await fetch(storbild.admin.url)).text()).toBe("Storbild admin");
   });
 });

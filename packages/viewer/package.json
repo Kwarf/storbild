@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./main": "./src/main.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.test.json"
+  },
+  "dependencies": {
+    "@storbild/core": "workspace:*",
+    "@storbild/plugin-sdk": "workspace:*",
+    "lit": "3.3.3"
   }
 }

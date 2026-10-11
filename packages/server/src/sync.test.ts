@@ -77,10 +77,23 @@ describe("GET /events", () => {
     expect(await snapshotOf(client)).toEqual(storbild.hub.state);
   });
 
-  test("sends a heartbeat comment", async () => {
+  test("sends a heartbeat event without an ID, which browsers can observe", async () => {
     const client = await connect();
     await snapshotOf(client);
-    expect(await client.next()).toEqual({ comment: "ping" });
+    expect(await client.next()).toEqual({ event: "ping", data: "1" });
+  });
+
+  test("adding the first playlist item puts it on air in the same revision", async () => {
+    const { id } = await createInstance("Rules");
+    const client = await connect();
+    await snapshotOf(client);
+    const { id: itemId } = await command("playlist.addItem", { instanceId: id });
+    const { ops } = await patchOf(client);
+    expect(ops).toContainEqual({
+      op: "add",
+      path: "/timeline/main",
+      value: { instanceId: id, itemId, startedAt: expect.any(Number) },
+    });
   });
 
   test("streams patches that rebuild the server state", async () => {
@@ -134,7 +147,7 @@ describe("GET /events", () => {
   test("resuming at the current revision sends no patches", async () => {
     const client = await connect(String(storbild.hub.state.revision));
     expect(await client.next()).toEqual({ retry: "2000" });
-    expect(await client.next()).toEqual({ comment: "ping" });
+    expect(await client.next()).toEqual({ event: "ping", data: "1" });
   });
 
   test("sends a snapshot when the buffer has rolled past Last-Event-ID", async () => {

@@ -27,7 +27,8 @@ export function createModuleRegistry(vendor: Vendor, modules: Iterable<PluginMod
 
 const immutable = "public, max-age=31536000, immutable";
 
-function serve(file: ModuleFile | undefined) {
+/** Serves a built file as immutable, or a 404. */
+export function serve(file: ModuleFile | undefined) {
   if (!file) return new Response("not found", { status: 404 });
   return new Response(file.body, {
     headers: {

@@ -5,6 +5,7 @@ import {
   diff,
   type HostCommand,
   hostCommandSchema,
+  interimTimeline,
   type JsonPatchOp,
   type PluginCatalog,
   type ShowState,
@@ -98,7 +99,7 @@ export class StateHub {
       throw new RevisionConflictError(before.revision);
     }
     const outcome = applyCommand(before, command, this.#context());
-    this.#commit(outcome.state);
+    this.#commit(this.#settle(outcome.state));
     return {
       revision: outcome.state.revision,
       ...(outcome.id !== undefined && { id: outcome.id }),
@@ -111,7 +112,12 @@ export class StateHub {
    */
   dispatchHost(command: HostCommand): number {
     const before = this.#state;
-    const { state } = applyCommand(before, hostCommandSchema.parse(command), this.#context());
+    const { state: applied } = applyCommand(
+      before,
+      hostCommandSchema.parse(command),
+      this.#context(),
+    );
+    const state = this.#settle(applied);
     if (diff(before, { ...state, revision: before.revision }).length > 0) this.#commit(state);
     return this.#state.revision;
   }
@@ -119,7 +125,7 @@ export class StateHub {
   /** Replaces the state with `fn(state)` as one new revision, unless nothing changes. */
   update(fn: (state: ShowState) => ShowState): number {
     const before = this.#state;
-    const next = { ...fn(before), revision: before.revision };
+    const next = this.#settle({ ...fn(before), revision: before.revision });
     if (diff(before, next).length > 0) this.#commit({ ...next, revision: before.revision + 1 });
     return this.#state.revision;
   }
@@ -135,6 +141,12 @@ export class StateHub {
 
   #context() {
     return { now: this.#now(), newId: this.#newId, catalog: this.#catalog };
+  }
+
+  /** Recomputes the timeline from the new state. M4 replaces this with the scheduler. */
+  #settle(state: ShowState): ShowState {
+    const timeline = interimTimeline(state, this.#now());
+    return timeline === state.timeline ? state : { ...state, timeline };
   }
 
   #commit(next: ShowState) {

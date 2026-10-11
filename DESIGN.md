@@ -301,7 +301,7 @@ The viewer stream receives the full `ShowState`. Each plugin entry carries what 
 - The first message is `event: snapshot`, `id: <revision>`, `data: <ShowState JSON>`.
 - After that comes `event: patch`, `id: <revision>`, `data: <RFC 6902 JSON Patch array>`. Patches target the narrowest path, so a now-playing update touches only `plugins.now-playing.state`.
 - **Resume.** On reconnect the browser sends `Last-Event-ID`. If the server's ring buffer still holds patches after that revision, it replays them; otherwise it sends a fresh snapshot.
-- **Heartbeat.** The server sends a `: ping` comment every 15 s and a `retry: 2000` field on connect.
+- **Heartbeat.** The server sends an `event: ping` (data `1`, no `id`) every 15 s, and a `retry: 2000` field on connect. It is an event rather than a comment so the viewer's watchdog can observe it ([ADR 0005](docs/decisions/0005-viewer.md)).
 - **Headers.** `Content-Type: text/event-stream`, `Cache-Control: no-cache`, no compression.
 - The viewer keeps track of connected streams for a "connected screens" count in the admin.
 
@@ -373,7 +373,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 ### 6.2 A plugin has three faces
 
 - **Viewer:** Lit elements extending `StorbildScene<Config, Settings>` or `StorbildOverlay<...>`.
-  - Props: `config`, `settings`, `state`, `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
+  - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
   - Lifecycle: `prepare()` (preload; awaited before the scene is used), `enter(at)`, `exit(at)`, `dispose()`.
   - Scenes don't implement transitions. The compositor owns them.
 - **Admin:** by default, forms are generated from the config and settings JSON Schema (`z.toJSONSchema()`) using the SDK's form components. A plugin may provide a custom editor element built from the same components (text, markdown, number, colour, duration, datetime, asset picker, list), so it looks native.
@@ -418,13 +418,16 @@ A plugin package's `exports["."]` is the definition module above, which only the
   3. overlay slots
   4. interrupt (optionally dims the layers below)
   5. blackout
-- **Transitions.** Owned by the compositor. The first version has a crossfade; more can come later. At most two scenes are mounted at once.
+- **Transitions.** Owned by the compositor. The first version has a crossfade (800 ms); more can come later. At most two scenes are visible at once. Scenes are keyed by instance, so an instance that stays on air is updated in place, never remounted.
 - **Prefetch.** When `timeline.next` appears, the viewer loads the plugin module, creates the element and awaits `prepare()` (image decode, fonts) before `startsAt`.
 - **Robustness:**
-  - The EventSource reconnects automatically.
-  - A watchdog reloads the page if there's no message or heartbeat for 60 s.
+  - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
+  - A watchdog reloads the page if there's no message or heartbeat for 60 s, but only if the server answers `/time`. Otherwise it reopens the stream and keeps waiting, so a kiosk is never left on an error page.
+  - A failing scene never stops the show. If `prepare()` fails, the scene is shown anyway; if its module can't load, only the layers below show.
   - On `visibilitychange` the viewer re-resolves the timeline from `serverNow()`.
   - Outages: the viewer keeps rendering via `resolveTimeline(state, serverNow())` from `packages/core` (see M10).
+Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
+
 - **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.
 
 ---
@@ -541,6 +544,8 @@ Package shape, bundling, module serving, state representation and failure handli
 
 **Done when:** two browser windows of different sizes show the same `markdown` instance. Changing the instance in the admin API updates both. Killing and restarting the server or the network recovers without a manual reload.
 
+Until M4, an interim rule puts the first enabled playlist item on air. The heartbeat becomes an observable `ping` event, and viewer elements gain `pluginState` next to `state`. These, the sync client, bundling, compositor behaviour and the Playwright e2e tests are specified in [ADR 0005](docs/decisions/0005-viewer.md).
+
 ### M4 — Scheduler and timeline
 
 **Depends on:** M1, M3 (for visual verification).
@@ -642,6 +647,6 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- Default rotation duration and transition length (suggested: 15 s and 800 ms).
+- Default rotation duration (suggested: 15 s). The transition length is 800 ms until M6 makes it a setting ([ADR 0005](docs/decisions/0005-viewer.md)).
 - Whether quick-announce messages should be auto-deleted after use, or kept in the library.
 - The exact upstream event format for `now-playing` (to be defined when the music service is known).

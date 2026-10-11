@@ -14,3 +14,4 @@ export * from "./schema/plugin.ts";
 export * from "./schema/state.ts";
 export * from "./schema/theme.ts";
 export * from "./schema/timeline.ts";
+export * from "./timeline.ts";

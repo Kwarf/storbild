@@ -36,7 +36,7 @@ function logsOf(result: Bun.BuildOutput): string {
   return result.logs.map((log) => String(log.message ?? log)).join("\n") || "build failed";
 }
 
-async function toFiles(outputs: Bun.BuildArtifact[], prefix = ""): Promise<ModuleFiles> {
+export async function toFiles(outputs: Bun.BuildArtifact[], prefix = ""): Promise<ModuleFiles> {
   const files: ModuleFiles = new Map();
   for (const output of outputs) {
     const path = prefix + output.path.replace(/^\.\//, "");

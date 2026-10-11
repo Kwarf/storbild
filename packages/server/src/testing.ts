@@ -102,7 +102,7 @@ export class SseClient {
   ): Promise<SseFrame & { event: string; id: string; data: string }> {
     for (;;) {
       const frame = await this.next(timeoutMs);
-      if (frame.event !== undefined)
+      if (frame.event !== undefined && frame.event !== "ping")
         return frame as SseFrame & { event: string; id: string; data: string };
     }
   }

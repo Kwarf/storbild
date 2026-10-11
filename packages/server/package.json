@@ -7,13 +7,17 @@
     ".": "./src/main.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p e2e"
   },
   "dependencies": {
     "@hono/zod-validator": "0.9.1",
     "@storbild/core": "workspace:*",
     "@storbild/plugin-sdk": "workspace:*",
+    "@storbild/viewer": "workspace:*",
     "hono": "4.13.13",
     "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
   }
 }
