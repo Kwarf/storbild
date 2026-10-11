@@ -4,7 +4,7 @@ This file provides guidance to coding agents working with code in this repositor
 
 ## Project status
 
-Storbild is plugin-based big-screen ("beamer") software for demoparties. M0–M5 are in place (foundation, core state and sync, plugin host, viewer, scheduler, admin foundation). [DESIGN.md](DESIGN.md) is the source of truth for architecture, scope and milestones (M0–M10). Read the relevant sections of DESIGN.md before starting any work, and keep scope to one milestone at a time.
+Storbild is plugin-based big-screen ("beamer") software for demoparties. M0–M5 are in place (foundation, core state and sync, plugin host, viewer, scheduler, admin foundation). M6 is split into M6a and M6b ([ADR 0009](docs/decisions/0009-split-m6.md)); M6a is next. [DESIGN.md](DESIGN.md) is the source of truth for architecture, scope and milestones (M0–M10). Read the relevant sections of DESIGN.md before starting any work, and keep scope to one milestone at a time.
 
 The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer) and 3001 (admin) are forwarded.
 

@@ -347,7 +347,7 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
-M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -494,12 +494,14 @@ The admin should be clean, professional and functional, without clutter or gimmi
 Each milestone is meant to be planned and implemented as a separate unit of work. Every milestone lists its dependencies, scope, acceptance criteria and what is explicitly deferred. Milestones on parallel branches of the dependency graph can be worked on independently.
 
 ```
-M0 ─► M1 ─► M2 ─┬─► M3 ─┬─► M4 ──────────────┐
-                │       ├─► M7 (theming)      │
-                │       └─► M8 (overlays)     ├─► M10 (hardening & release)
-                └─► M5 ─► M6 (admin content) ─┤
-                    M9 (built-in plugins) ────┘   (M9 needs M2+M3; grows alongside)
+M0 ─► M1 ─► M2 ─┬─► M3 ─┬─► M4 ─────────────────────────┐
+                │       ├─► M7 (theming)                 │
+                │       └─► M8 (overlays)                ├─► M10 (hardening & release)
+                └─► M5 ─► M6a (forms, pages) ─► M6b ─────┤   M6b: assets, schedule, announce
+                    M9 (built-in plugins) ───────────────┘   (M9 needs M2+M3; grows alongside)
 ```
+
+M6 is split into M6a and M6b ([ADR 0009](docs/decisions/0009-split-m6.md)).
 
 ### M0 — Repository foundation
 
@@ -593,35 +595,46 @@ Live control as a separate `live` input, the anchor item, rotation and edit rule
 
 Sessions, the cookie, rate limiting, the origin check, which routes are public, bundling, the font, the typed client and the Live panel's controls are specified in [ADR 0007](docs/decisions/0007-admin-foundation.md).
 
-### M6 — Admin content management and assets
+### M6a — Admin forms and content pages
 
 **Depends on:** M2, M4, M5.
 
-- Asset store per §4.7: upload, thumbnails, the library picker and serving.
-- A schema-driven form renderer from `z.toJSONSchema()`, built from the SDK form components, with custom editor support.
+- A schema-driven form renderer from `z.toJSONSchema()`, built from the SDK form components (text, markdown, number, colour, duration, datetime, list), with custom editor support (§6.2). The asset picker comes in M6b.
 - Pages:
-  - **Library:** CRUD for instances, with live preview.
+  - **Library:** CRUD for instances, grouped by type, with live preview.
   - **Rotation:** reorder, durations, enable, time windows.
-  - **Schedule:** cue CRUD.
   - **Plugins:** status and settings.
-  - **Settings:** global defaults.
-- Quick announce: type a message, which creates and interrupts with an `announcement` instance (requires the M9 plugin, or a stub).
+  - **Settings:** global defaults: the default rotation duration and the transition length, which become settings in state instead of constants.
 
-**Done when:** a complete show can be built from scratch in the admin, with no API calls or SQL, and runs unattended.
+**Done when:** a show of text scenes (for example `markdown`) can be built from scratch in the admin, with no API calls or SQL, and runs unattended.
+
+**Deferred:** the asset store, the Schedule page and quick announce (M6b).
+
+### M6b — Assets, schedule and quick announce
+
+**Depends on:** M6a.
+
+- Asset store per §4.7: upload, thumbnails, serving at `/assets/<hash>`, and an asset picker form component.
+- **Schedule:** the `cue.*` commands and a day-ordered cue list with CRUD.
+- The `announcement` plugin (from M9), built on the public SDK only. It renders an opaque panel, so the interrupt modes `dim` and `show` are useful ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md)).
+- Quick announce: type a message in the Live panel, which creates an `announcement` instance and interrupts with it. Decide whether such instances are kept in the library or cleaned up (§11).
+
+**Done when:** a complete show, including images and scheduled cues, can be built from scratch in the admin and runs unattended. A typed message can be announced in a few seconds.
 
 ### M7 — Theming
 
-**Depends on:** M3; the admin UI part depends on M6.
+**Depends on:** M3; the admin UI part depends on M6b (forms and the asset picker, for fonts and image backgrounds).
 
 - The theme model, commands and multiple themes with one active.
 - Viewer: CSS custom properties, `@font-face` from uploaded fonts with `document.fonts.load()` gating, and background types (colour, image with dim, video, scene). Honours scene `background: "own"` and `Instance.background`. No background transition between two theme-background scenes. Optional `customCss`.
+- The interrupt cover layer (`below: "hide"`) renders the same background as the bottom layer, not just its colour ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md)).
 - Admin theme editor with live preview, and activation.
 
 **Done when:** switching the active theme live changes the background, fonts and colours of every built-in scene and overlay without a reload, and without a fallback-font flash.
 
 ### M8 — Overlays
 
-**Depends on:** M3; the admin UI part depends on M6.
+**Depends on:** M3; the admin UI part depends on M6a.
 
 - Slot layout per §4.5: flex stacks, order, gaps from the theme, safe area and max sizes.
 - Fade out widgets for `reserveSlots` and `hideOverlays`, and stale-hide support in the SDK base class.
@@ -635,7 +648,7 @@ Sessions, the cookie, rate limiting, the origin check, which routes are public, 
 
 Implement the plugins in §6.4 using only the public SDK, each with tests:
 
-- `markdown` (polish the M2 fixture), `slideshow`, `countdown` (scene and overlay), `announcement`, `info` (Wi-Fi with QR, clock).
+- `markdown` (polish the M2 fixture), `slideshow`, `countdown` (scene and overlay), `info` (Wi-Fi with QR, clock). `announcement` is built in M6b.
 - `now-playing`: the server part consumes an upstream SSE stream from a URL in settings, maps events to `{ artist, title }` in plugin state, reconnects with backoff, and stale-hides. Mapping details stay flexible.
 
 **Done when:** each plugin works in a real show, adapts to theme changes, and appears correctly in the admin with generated or custom forms.
@@ -668,6 +681,6 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 ## 11. Open questions
 
 - The npm scope `@storbild` and the GitHub org name need an availability check.
-- The default rotation duration is 15 s ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)) and the transition length 800 ms ([ADR 0005](docs/decisions/0005-viewer.md)), until M6 makes them settings.
+- The default rotation duration is 15 s ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)) and the transition length 800 ms ([ADR 0005](docs/decisions/0005-viewer.md)), until M6a makes them settings.
 - Whether quick-announce messages should be auto-deleted after use, or kept in the library.
 - The exact upstream event format for `now-playing` (to be defined when the music service is known).
