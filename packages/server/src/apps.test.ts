@@ -1,10 +1,10 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseConfig } from "@storbild/core";
 import { createAdminApp } from "./admin-app.ts";
-import { start } from "./main.ts";
+import { type Storbild, start } from "./main.ts";
 import { createTestHub } from "./testing.ts";
 import { createViewerApp } from "./viewer-app.ts";
 
@@ -42,7 +42,7 @@ describe("admin app", () => {
     });
   const create = {
     type: "instance.create",
-    payload: { plugin: "markdown", type: "text", name: "Rules", config: {} },
+    payload: { plugin: "markdown", type: "text", name: "Rules", config: { content: "#" } },
   };
 
   test("serves the admin root", async () => {
@@ -87,13 +87,16 @@ describe("admin app", () => {
 
 describe("start", () => {
   const dataDir = mkdtempSync(join(tmpdir(), "storbild-"));
-  const storbild = start(
-    parseConfig({
-      STORBILD_VIEWER_PORT: "0",
-      STORBILD_ADMIN_PORT: "0",
-      STORBILD_DATA_DIR: dataDir,
-    }),
-  );
+  let storbild: Storbild;
+  beforeAll(async () => {
+    storbild = await start(
+      parseConfig({
+        STORBILD_VIEWER_PORT: "0",
+        STORBILD_ADMIN_PORT: "0",
+        STORBILD_DATA_DIR: dataDir,
+      }),
+    );
+  });
   afterAll(async () => {
     await storbild.stop();
     rmSync(dataDir, { recursive: true });

@@ -8,3 +8,7 @@ export const epochMsSchema = z.number().int();
 
 /** A non-negative duration in milliseconds. */
 export const durationMsSchema = z.number().int().positive();
+
+/** Any JSON value. */
+export const jsonSchema = z.json();
+export type JsonValue = z.infer<typeof jsonSchema>;

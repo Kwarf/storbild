@@ -5,18 +5,9 @@ import { cueSchema } from "./cue.ts";
 import { instanceSchema } from "./instance.ts";
 import { overlayPlacementSchema } from "./overlay.ts";
 import { playlistSchema } from "./playlist.ts";
+import { pluginEntrySchema } from "./plugin.ts";
 import { type Theme, themeSchema } from "./theme.ts";
 import { type Timeline, timelineSchema } from "./timeline.ts";
-
-export const pluginStatusSchema = z.enum(["ok", "incompatible", "error"]);
-export type PluginStatus = z.infer<typeof pluginStatusSchema>;
-
-export const pluginEntrySchema = z.object({
-  settings: z.json(),
-  state: z.json(),
-  status: pluginStatusSchema,
-});
-export type PluginEntry = z.infer<typeof pluginEntrySchema>;
 
 export const showStateSchema = z.object({
   revision: z.number().int().nonnegative(),

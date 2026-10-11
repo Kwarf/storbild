@@ -1,20 +1,46 @@
-import { createInitialState, type ShowState } from "@storbild/core";
+import {
+  createInitialState,
+  type PluginCatalog,
+  reconcilePlugins,
+  type ShowState,
+} from "@storbild/core";
+import { z } from "zod";
 import { openDatabase } from "./db.ts";
 import { StateHub } from "./state-hub.ts";
 import { saveState } from "./store.ts";
 
-/** A hub on an in-memory database with deterministic time and IDs. */
+/** A catalog with one plugin, shaped like the built-in `markdown`. */
+export const testCatalog: PluginCatalog = {
+  markdown: {
+    id: "markdown",
+    version: "0.1.0",
+    status: "ok",
+    settings: z.object({ fontScale: z.number().positive().default(1) }),
+    types: {
+      text: {
+        kind: "scene",
+        label: "Markdown text",
+        viewer: "sb-markdown-scene",
+        config: z.object({ title: z.string().optional(), content: z.string() }),
+        configVersion: 1,
+      },
+    },
+  },
+};
+
+/** A hub on an in-memory database with deterministic time and IDs, and `testCatalog`. */
 export function createTestHub(bufferSize?: number): StateHub {
   let next = 0;
   const newId = () => `id${++next}`;
   const db = openDatabase(":memory:");
-  const initial: ShowState = createInitialState({ now: 0, newId });
+  const initial: ShowState = reconcilePlugins(createInitialState({ now: 0, newId }), testCatalog);
   saveState(db, initial);
   return new StateHub({
     db,
     initial,
     now: () => 0,
     newId,
+    catalog: testCatalog,
     ...(bufferSize !== undefined && { bufferSize }),
   });
 }

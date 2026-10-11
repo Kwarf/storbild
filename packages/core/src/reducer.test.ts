@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { Command } from "./commands.ts";
+import { type Command, commandSchema, type HostCommand } from "./commands.ts";
+import { reconcilePlugins } from "./plugins.ts";
 import { applyCommand, CommandError } from "./reducer.ts";
 import { createInitialState, type ShowState } from "./schema/state.ts";
+import { testCatalog } from "./test/catalog.ts";
 
 function setup() {
   let next = 0;
-  const ctx = { now: 1_000, newId: () => `id${++next}` };
-  let state = createInitialState(ctx);
-  const run = (command: Command) => {
+  const ctx = { now: 1_000, newId: () => `id${++next}`, catalog: testCatalog };
+  let state = reconcilePlugins(createInitialState(ctx), testCatalog);
+  const run = (command: Command | HostCommand) => {
     const outcome = applyCommand(state, command, ctx);
     state = outcome.state;
     return outcome.id;
@@ -180,5 +182,128 @@ describe("applyCommand", () => {
     const s = setup();
     expect(errorOf(() => s.run(command)).code).toBe("not_found");
     expect(s.state.revision).toBe(0);
+  });
+
+  test("instance.create validates config against the plugin and applies defaults", () => {
+    const s = setup();
+    const id = s.run({
+      type: "instance.create",
+      payload: { plugin: "markdown", type: "counter", name: "C", config: { count: 3 } },
+    }) as string;
+    expect(s.state.instances[id]).toMatchObject({
+      config: { count: 3, step: 1 },
+      configVersion: 2,
+    });
+
+    const invalid = errorOf(() =>
+      s.run({ type: "instance.create", payload: { ...markdown, config: { content: 5 } } }),
+    );
+    expect(invalid.code).toBe("invalid");
+    expect(invalid.issues).toEqual([{ path: ["content"], message: expect.any(String) }]);
+  });
+
+  test.each([
+    ["an unknown plugin", { plugin: "nope", type: "text" }, "not_found"],
+    ["an unknown type", { plugin: "markdown", type: "nope" }, "not_found"],
+    ["an incompatible plugin", { plugin: "legacy", type: "text" }, "invalid"],
+  ] as const)("instance.create rejects %s", (_, target, code) => {
+    const s = setup();
+    const error = errorOf(() =>
+      s.run({ type: "instance.create", payload: { ...markdown, ...target } }),
+    );
+    expect(error.code).toBe(code);
+    expect(s.state.revision).toBe(0);
+  });
+
+  test("instance.create migrates a config in an older version", () => {
+    const s = setup();
+    const payload = { plugin: "markdown", type: "counter", name: "C", config: { n: "4" } };
+    const id = s.run({ type: "instance.create", payload: { ...payload, configVersion: 1 } });
+    expect(s.state.instances[id as string]).toMatchObject({
+      config: { count: 4, step: 1 },
+      configVersion: 2,
+    });
+    const newer = errorOf(() =>
+      s.run({ type: "instance.create", payload: { ...payload, configVersion: 3 } }),
+    );
+    expect(newer.code).toBe("invalid");
+  });
+
+  test("instance.update validates a new config and clears a broken flag", () => {
+    const s = setup();
+    const id = s.run({ type: "instance.create", payload: markdown }) as string;
+    expect(
+      errorOf(() => s.run({ type: "instance.update", payload: { id, config: {} } })).code,
+    ).toBe("invalid");
+
+    const instance = s.state.instances[id];
+    if (!instance) throw new Error("no instance");
+    const broken: ShowState = {
+      ...s.state,
+      instances: { [id]: { ...instance, error: "bad" } },
+    };
+    const renamed = applyCommand(
+      broken,
+      { type: "instance.update", payload: { id, name: "Renamed" } },
+      s.ctx,
+    ).state;
+    expect(renamed.instances[id]?.error).toBe("bad");
+    const fixed = applyCommand(
+      broken,
+      { type: "instance.update", payload: { id, config: { content: "ok" } } },
+      s.ctx,
+    ).state;
+    expect(fixed.instances[id]).toEqual({ ...instance, config: { content: "ok" } });
+  });
+
+  test("plugin.updateSettings validates and replaces the settings", () => {
+    const s = setup();
+    expect(s.state.plugins.markdown?.settings).toEqual({ fontScale: 1 });
+    s.run({ type: "plugin.updateSettings", payload: { plugin: "markdown", settings: {} } });
+    expect(s.state.plugins.markdown?.settings).toEqual({ fontScale: 1 });
+    s.run({
+      type: "plugin.updateSettings",
+      payload: { plugin: "markdown", settings: { fontScale: 2 } },
+    });
+    expect(s.state.plugins.markdown?.settings).toEqual({ fontScale: 2 });
+
+    const update = (plugin: string, settings: unknown) => () =>
+      s.run({ type: "plugin.updateSettings", payload: { plugin, settings: settings as never } });
+    const invalid = errorOf(update("markdown", { fontScale: -1 }));
+    expect(invalid.code).toBe("invalid");
+    expect(invalid.issues?.[0]?.path).toEqual(["fontScale"]);
+    expect(errorOf(update("legacy", {})).code).toBe("invalid");
+    expect(errorOf(update("nope", {})).code).toBe("not_found");
+  });
+
+  test("host commands set plugin state, status and instance state", () => {
+    const s = setup();
+    const id = s.run({ type: "instance.create", payload: markdown }) as string;
+    s.run({ type: "plugin.setState", payload: { plugin: "markdown", state: { n: 1 } } });
+    s.run({
+      type: "plugin.setStatus",
+      payload: { plugin: "markdown", status: "error", error: "boom" },
+    });
+    s.run({ type: "instance.setState", payload: { id, state: [1, 2] } });
+    expect(s.state.plugins.markdown).toMatchObject({
+      state: { n: 1 },
+      status: "error",
+      error: "boom",
+    });
+    expect(s.state.instances[id]?.state).toEqual([1, 2]);
+
+    s.run({ type: "plugin.setStatus", payload: { plugin: "markdown", status: "ok" } });
+    expect(s.state.plugins.markdown?.error).toBeUndefined();
+    expect(
+      errorOf(() => s.run({ type: "plugin.setState", payload: { plugin: "nope", state: 1 } })).code,
+    ).toBe("not_found");
+  });
+
+  test("the admin command schema does not accept host commands", () => {
+    const parsed = commandSchema.safeParse({
+      type: "plugin.setState",
+      payload: { plugin: "markdown", state: 1 },
+    });
+    expect(parsed.success).toBe(false);
   });
 });

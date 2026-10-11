@@ -12,8 +12,8 @@ let dataDir: string;
 let storbild: Storbild;
 const clients: SseClient[] = [];
 
-function boot(options: StartOptions = {}) {
-  storbild = start(
+async function boot(options: StartOptions = {}) {
+  storbild = await start(
     parseConfig({
       STORBILD_VIEWER_PORT: "0",
       STORBILD_ADMIN_PORT: "0",
@@ -23,9 +23,9 @@ function boot(options: StartOptions = {}) {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   dataDir = mkdtempSync(join(tmpdir(), "storbild-"));
-  boot();
+  await boot();
 });
 
 afterEach(async () => {
@@ -51,7 +51,7 @@ async function command(type: string, payload: unknown) {
 }
 
 const createInstance = (name: string) =>
-  command("instance.create", { plugin: "markdown", type: "text", name, config: {} });
+  command("instance.create", { plugin: "markdown", type: "text", name, config: { content: name } });
 
 async function snapshotOf(client: SseClient) {
   const frame = await client.nextEvent();
@@ -173,7 +173,7 @@ describe("GET /events", () => {
     const before = storbild.hub.state;
 
     await storbild.stop();
-    boot();
+    await boot();
     expect(storbild.hub.state).toEqual(before);
 
     // A viewer that saw the last revision before the restart resumes without a snapshot.

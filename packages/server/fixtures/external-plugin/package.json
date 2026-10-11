@@ -1,0 +1,16 @@
+{
+  "name": "storbild-plugin-external",
+  "version": "1.2.3",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/plugin.ts"
+  },
+  "storbild": {
+    "viewer": "./src/viewer.ts"
+  },
+  "peerDependencies": {
+    "@storbild/plugin-sdk": "*",
+    "lit": "^3.3.3"
+  }
+}

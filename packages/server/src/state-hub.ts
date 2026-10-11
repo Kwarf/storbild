@@ -3,7 +3,10 @@ import {
   applyCommand,
   type Command,
   diff,
+  type HostCommand,
+  hostCommandSchema,
   type JsonPatchOp,
+  type PluginCatalog,
   type ShowState,
   unescapePointerToken,
 } from "@storbild/core";
@@ -42,6 +45,8 @@ export interface StateHubOptions {
   initial: ShowState;
   now: () => number;
   newId: () => string;
+  /** The loaded plugins, which validate settings and instance config. */
+  catalog?: PluginCatalog;
   /** How many patches are kept for `Last-Event-ID` resume. */
   bufferSize?: number;
 }
@@ -56,17 +61,20 @@ export class StateHub {
   readonly #db: Database;
   readonly #now: () => number;
   readonly #newId: () => string;
+  readonly #catalog: PluginCatalog;
   readonly #bufferSize: number;
   readonly #buffer: PatchEvent[] = [];
   /** Streams that have seen this revision or later can resume from the buffer. */
   #bufferBase: number;
   readonly #listeners = new Set<(event: PatchEvent) => void>();
+  readonly #watchers = new Set<(event: PatchEvent) => void>();
 
-  constructor({ db, initial, now, newId, bufferSize = 256 }: StateHubOptions) {
+  constructor({ db, initial, now, newId, catalog = {}, bufferSize = 256 }: StateHubOptions) {
     this.#db = db;
     this.#state = initial;
     this.#now = now;
     this.#newId = newId;
+    this.#catalog = catalog;
     this.#bufferSize = bufferSize;
     this.#bufferBase = initial.revision;
   }
@@ -89,18 +97,54 @@ export class StateHub {
     if (expectedRevision !== undefined && expectedRevision !== before.revision) {
       throw new RevisionConflictError(before.revision);
     }
-    const outcome = applyCommand(before, command, { now: this.#now(), newId: this.#newId });
-    const ops = diff(before, outcome.state);
-    const keys = new Set(
-      ops.map((op) => unescapePointerToken(op.path.split("/")[1] ?? "") as keyof ShowState),
-    );
-    saveState(this.#db, outcome.state, keys);
-    this.#state = outcome.state;
-    this.#publish({ revision: outcome.state.revision, ops });
+    const outcome = applyCommand(before, command, this.#context());
+    this.#commit(outcome.state);
     return {
       revision: outcome.state.revision,
       ...(outcome.id !== undefined && { id: outcome.id }),
     };
+  }
+
+  /**
+   * Applies a command on behalf of the plugin runtime. The payload is validated here, so a
+   * plugin passing non-JSON state gets a ZodError. A command that changes nothing is dropped.
+   */
+  dispatchHost(command: HostCommand): number {
+    const before = this.#state;
+    const { state } = applyCommand(before, hostCommandSchema.parse(command), this.#context());
+    if (diff(before, { ...state, revision: before.revision }).length > 0) this.#commit(state);
+    return this.#state.revision;
+  }
+
+  /** Replaces the state with `fn(state)` as one new revision, unless nothing changes. */
+  update(fn: (state: ShowState) => ShowState): number {
+    const before = this.#state;
+    const next = { ...fn(before), revision: before.revision };
+    if (diff(before, next).length > 0) this.#commit({ ...next, revision: before.revision + 1 });
+    return this.#state.revision;
+  }
+
+  /**
+   * Watches every new revision from inside the server. Unlike stream listeners, watchers are
+   * called in a microtask, so they may dispatch without reordering other streams' patches.
+   */
+  watch(watcher: (event: PatchEvent) => void): () => void {
+    this.#watchers.add(watcher);
+    return () => this.#watchers.delete(watcher);
+  }
+
+  #context() {
+    return { now: this.#now(), newId: this.#newId, catalog: this.#catalog };
+  }
+
+  #commit(next: ShowState) {
+    const ops = diff(this.#state, next);
+    const keys = new Set(
+      ops.map((op) => unescapePointerToken(op.path.split("/")[1] ?? "") as keyof ShowState),
+    );
+    saveState(this.#db, next, keys);
+    this.#state = next;
+    this.#publish({ revision: next.revision, ops });
   }
 
   /**
@@ -129,6 +173,15 @@ export class StateHub {
       } catch (error) {
         console.error("state listener failed", error);
       }
+    }
+    for (const watcher of this.#watchers) {
+      queueMicrotask(() => {
+        try {
+          watcher(event);
+        } catch (error) {
+          console.error("state watcher failed", error);
+        }
+      });
     }
   }
 }

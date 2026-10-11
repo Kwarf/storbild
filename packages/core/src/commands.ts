@@ -56,6 +56,8 @@ export const commandSchema = z.discriminatedUnion("type", [
   command("playlist.removeItem", z.object({ id: idSchema })),
   /** `itemIds` must be a permutation of the current item IDs. */
   command("playlist.reorder", z.object({ itemIds: z.array(idSchema) })),
+  /** Replaces the plugin's settings whole; they are validated by its settings schema. */
+  command("plugin.updateSettings", z.object({ plugin: z.string().min(1), settings: z.json() })),
 ]);
 export type Command = z.infer<typeof commandSchema>;
 export type CommandType = Command["type"];
@@ -66,3 +68,21 @@ export const commandRequestSchema = z.intersection(
   z.object({ expectedRevision: z.number().int().nonnegative().optional() }),
 );
 export type CommandRequest = z.infer<typeof commandRequestSchema>;
+
+/**
+ * Commands only the server issues, on behalf of the plugin runtime. They go through the same
+ * reducer, persistence and broadcast as `Command`, but `POST /api/commands` never accepts them.
+ */
+export const hostCommandSchema = z.discriminatedUnion("type", [
+  command("plugin.setState", z.object({ plugin: z.string().min(1), state: z.json() })),
+  command(
+    "plugin.setStatus",
+    z.object({
+      plugin: z.string().min(1),
+      status: z.enum(["ok", "error"]),
+      error: z.string().optional(),
+    }),
+  ),
+  command("instance.setState", z.object({ id: idSchema, state: z.json() })),
+]);
+export type HostCommand = z.infer<typeof hostCommandSchema>;

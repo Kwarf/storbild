@@ -37,6 +37,11 @@ const migrations: string[] = [
     state TEXT NOT NULL CHECK (json_valid(state))
   ) STRICT;
   `,
+  // The plugin host's view of each plugin (status, version, module, types). It is recomputed
+  // on load; storing it means a restart with unchanged plugins doesn't produce a new revision.
+  `
+  ALTER TABLE plugins ADD COLUMN info TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(info));
+  `,
 ];
 
 /** Opens (creating if needed) and migrates the database. `path` may be ":memory:". */

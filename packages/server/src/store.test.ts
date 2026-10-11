@@ -15,7 +15,11 @@ function fullState(): ShowState {
       "now-playing": {
         settings: { url: "http://x" },
         state: { artist: "A", title: "B" },
-        status: "ok",
+        version: "1.0.0",
+        status: "error",
+        error: "boom",
+        module: "/plugins/now-playing/1.0.0/viewer.js",
+        types: { track: { kind: "overlay", label: "Track", viewer: "sb-track", singleton: true } },
       },
     },
     instances: {

@@ -1,12 +1,16 @@
-import type { Command } from "./commands.ts";
+import type { Command, HostCommand } from "./commands.ts";
+import { type Issue, type Normalized, normalizeConfig, normalizeSettings } from "./plugins.ts";
 import type { Instance } from "./schema/instance.ts";
 import type { PlaylistItem } from "./schema/playlist.ts";
+import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
 import type { ShowState } from "./schema/state.ts";
 
 export interface CommandContext {
   /** Server time of the command, epoch ms. */
   now: number;
   newId: () => string;
+  /** The loaded plugins, which validate settings and instance config. */
+  catalog: PluginCatalog;
 }
 
 export interface CommandOutcome {
@@ -22,10 +26,16 @@ export class CommandError extends Error {
   constructor(
     readonly code: CommandErrorCode,
     message: string,
+    readonly issues?: Issue[],
   ) {
     super(message);
     this.name = "CommandError";
   }
+}
+
+function unwrap<T>(result: Normalized<T>): T {
+  if (!result.ok) throw new CommandError(result.code, result.message, result.issues);
+  return result.value;
 }
 
 /**
@@ -34,21 +44,25 @@ export class CommandError extends Error {
  */
 export function applyCommand(
   state: ShowState,
-  command: Command,
+  command: Command | HostCommand,
   ctx: CommandContext,
 ): CommandOutcome {
   const outcome = reduce(state, command, ctx);
   return { ...outcome, state: { ...outcome.state, revision: state.revision + 1 } };
 }
 
-function reduce(state: ShowState, command: Command, ctx: CommandContext): CommandOutcome {
+function reduce(
+  state: ShowState,
+  command: Command | HostCommand,
+  ctx: CommandContext,
+): CommandOutcome {
   switch (command.type) {
     case "instance.create": {
-      const { configVersion, background, ...rest } = command.payload;
+      const { config, configVersion, background, ...rest } = command.payload;
       const instance: Instance = {
         id: ctx.newId(),
         ...rest,
-        configVersion: configVersion ?? 1,
+        ...unwrap(normalizeConfig(ctx.catalog, rest.plugin, rest.type, config, configVersion)),
         ...(background !== undefined && { background }),
       };
       return {
@@ -58,8 +72,24 @@ function reduce(state: ShowState, command: Command, ctx: CommandContext): Comman
     }
 
     case "instance.update": {
-      const { id, ...changes } = command.payload;
-      const instance = merge(getInstance(state, id), changes);
+      const { id, config, configVersion, ...changes } = command.payload;
+      let instance = merge(getInstance(state, id), changes);
+      if (config !== undefined || configVersion !== undefined) {
+        // A new config without a version is in the type's current version.
+        const { error: _, ...rest } = instance;
+        instance = {
+          ...rest,
+          ...unwrap(
+            normalizeConfig(
+              ctx.catalog,
+              instance.plugin,
+              instance.type,
+              config ?? instance.config,
+              config !== undefined ? configVersion : (configVersion ?? instance.configVersion),
+            ),
+          ),
+        };
+      }
       return { state: { ...state, instances: { ...state.instances, [id]: instance } } };
     }
 
@@ -130,7 +160,47 @@ function reduce(state: ShowState, command: Command, ctx: CommandContext): Comman
       }
       return { state: withItems(state, items) };
     }
+
+    case "plugin.updateSettings": {
+      const { plugin, settings } = command.payload;
+      const entry = getPlugin(state, plugin);
+      const value = unwrap(normalizeSettings(ctx.catalog, plugin, settings));
+      return { state: withPlugin(state, plugin, { ...entry, settings: value }) };
+    }
+
+    case "plugin.setState": {
+      const { plugin, state: value } = command.payload;
+      return { state: withPlugin(state, plugin, { ...getPlugin(state, plugin), state: value }) };
+    }
+
+    case "plugin.setStatus": {
+      const { plugin, status, error } = command.payload;
+      const { error: _, ...entry } = getPlugin(state, plugin);
+      return {
+        state: withPlugin(state, plugin, {
+          ...entry,
+          status,
+          ...(error !== undefined && { error }),
+        }),
+      };
+    }
+
+    case "instance.setState": {
+      const { id, state: value } = command.payload;
+      const instance = { ...getInstance(state, id), state: value };
+      return { state: { ...state, instances: { ...state.instances, [id]: instance } } };
+    }
   }
+}
+
+function getPlugin(state: ShowState, id: string): PluginEntry {
+  const entry = state.plugins[id];
+  if (!entry) throw new CommandError("not_found", `plugin ${id} not found`);
+  return entry;
+}
+
+function withPlugin(state: ShowState, id: string, entry: PluginEntry): ShowState {
+  return { ...state, plugins: { ...state.plugins, [id]: entry } };
 }
 
 function getInstance(state: ShowState, id: string): Instance {

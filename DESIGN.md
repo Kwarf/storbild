@@ -135,12 +135,13 @@ interface Instance {
   configVersion: number;     // for migrations
   background?: "theme" | "none" | { assetId: string; fit: "cover" | "contain" };
   state?: unknown;           // runtime data written by the plugin's server part
+  error?: string;            // set by the plugin host when the instance is broken
 }
 ```
 
 - An instance can appear several times in the playlist. Instances that aren't in the playlist (for example a pre-made "Fire exit" announcement) can be taken live or used as interrupts.
 - Settings vs. config inheritance is the **plugin's** responsibility. Make the config field optional and resolve it as `config.x ?? settings.x`. There is no generic merge in the core.
-- An instance that fails validation after migration is marked **broken**. It is skipped by the scheduler and flagged in the admin, and it never crashes the show.
+- An instance that fails validation after migration, or whose plugin or type is unavailable, is marked **broken** (`error` is set). It is skipped by the scheduler and flagged in the admin, and it never crashes the show.
 
 ### 4.2 Playlist (rotation)
 
@@ -265,7 +266,7 @@ interface FontRef { family: string; assetIds?: string[] }   // uploaded woff2 fi
 ```ts
 interface ShowState {
   revision: number;
-  plugins: Record<string, { settings: unknown; state: unknown; status: "ok" | "incompatible" | "error" }>;
+  plugins: Record<string, PluginEntry>;
   instances: Record<string, Instance>;
   playlist: { items: PlaylistItem[]; anchorAt: number };
   cues: Cue[];
@@ -277,7 +278,19 @@ interface ShowState {
 }
 ```
 
-The viewer stream receives the full `ShowState`. The plugin modules it needs are listed in a derived `pluginModules` map (plugin ID to versioned module URL).
+```ts
+interface PluginEntry {
+  version?: string;
+  status: "ok" | "incompatible" | "error" | "missing";  // missing: data stored, plugin gone
+  error?: string;
+  settings: unknown;
+  state: unknown;
+  module?: string;             // versioned viewer module URL
+  types: Record<string, { kind: "scene" | "overlay"; label: string; viewer: string; /* … */ }>;
+}
+```
+
+The viewer stream receives the full `ShowState`. Each plugin entry carries what the viewer needs without plugin code: the versioned module URL and, per type, its element and compositor hints. Only settings and state are owned by the show; the plugin host recomputes the rest on load ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
 ---
 
@@ -319,6 +332,8 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `cue.*` in M6, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md)).
 
+From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
+
 ---
 
 ## 6. Plugin system
@@ -351,7 +366,9 @@ export default definePlugin({
 });
 ```
 
-`definePlugin()` infers types from the Zod schemas. The scene element's `config` and `settings` props, and the server part's settings, are typed automatically.
+`definePlugin()` infers types from the Zod schemas. The server part's settings and instances are typed automatically, and viewer elements get theirs with `PluginConfig<typeof plugin, "text">` and `PluginSettings<typeof plugin>`.
+
+A plugin package's `exports["."]` is the definition module above, which only the server loads. Its browser entry, which registers the custom elements, is named in `package.json` as `"storbild": { "viewer": "./src/viewer.ts" }`. The SDK is split the same way: `@storbild/plugin-sdk` (definition, `z`, types), `@storbild/plugin-sdk/viewer` (Lit base classes) and `@storbild/plugin-sdk/build` (build preset).
 
 ### 6.2 A plugin has three faces
 
@@ -364,7 +381,7 @@ export default definePlugin({
   - `ctx.settings()` and `ctx.onSettingsChange(cb)`
   - `ctx.instances(type?)` and `ctx.onInstancesChange(cb)`
   - `ctx.setPluginState(value)` and `ctx.setInstanceState(id, value)`, which produce patches
-  - `ctx.route(app => …)` for extra admin-side HTTP routes, such as webhooks
+  - `ctx.route(request => response)`, a fetch handler for extra admin-side HTTP routes under `/api/plugins/<id>/`, such as webhooks
   - `ctx.log`, plus an abort signal for shutdown
 
   Server parts run in-process. The host wraps them in error handling and restarts failed sources with backoff.
@@ -373,7 +390,7 @@ export default definePlugin({
 
 - The host discovers plugins in `plugins/` (built-ins and dropped-in folders) and any configured package names.
 - Plugins ship **built ESM plus `.d.ts`**. `lit`, `zod` and `@storbild/plugin-sdk` are `peerDependencies` and are marked **external** in plugin builds. The SDK provides a build preset.
-- In the browser, an **import map** generated by the host resolves `lit` and `@storbild/plugin-sdk` to the host's single copies. On the server, the host provides the same modules.
+- In the browser, an **import map** generated by the host (`/importmap.json`) resolves `lit`, `zod` and `@storbild/plugin-sdk` to the host's single copies under `/vendor/<hash>/`. On the server, the host bundles each plugin's definition module with `Bun.build`, pointing the same modules at its own copies, and bundles the viewer entry for the browser. Plugins may ship TypeScript or built ESM ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 - Modules are served at `/plugins/<id>/<version>/…`, with version in the path, so caching is safe. The viewer dynamically `import()`s only the plugins used by the current state.
 - `apiVersion` is checked on load. An incompatible plugin gets `status: "incompatible"`, which is shown in the admin and never crashes the host.
 - Each instance type may export `migrate(fromVersion, config)`. The host migrates and then validates stored config on load.
@@ -511,6 +528,8 @@ Mechanics (pure reducer in core, diff-based patches, table layout, resume rules)
 
 **Done when:** a plugin in a separate directory outside the repo, depending only on the SDK, loads with full type checking. Its settings and instances validate. A server part can write plugin state and the resulting patch appears on `/events`.
 
+Package shape, bundling, module serving, state representation and failure handling are specified in [ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md). Reloading plugins from `STORBILD_PLUGIN_PATHS` on change is deferred to M10.
+
 ### M3 — Viewer
 
 **Depends on:** M2.
@@ -602,7 +621,7 @@ Implement the plugins in §6.4 using only the public SDK, each with tests:
 - **Offline resilience.** A service worker caches the viewer shell, plugin modules and referenced assets. During an outage the viewer continues the rotation via `resolveTimeline` from its last state, and resyncs on reconnect.
 - **Show export and import.** JSON plus an assets zip, for preparing a show ahead of the party.
 - **Deployment.** A systemd unit and an optional Docker image. `docs/deployment.md` covers Caddy (two hosts, basic auth on screen), DNS, kiosk setup (`deploy/kiosk/`), and pinning or disabling Chromium updates.
-- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk`.
+- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk`. Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
 - **Soak test.** 24 h unattended on target-like hardware, with a forced network outage and a server restart during the run.
 
 **Done when:** a fresh VPS and kiosk can be set up from the docs alone, and the soak test passes.

@@ -6,6 +6,7 @@ import {
   type PluginEntry,
   placeholderTimeline,
   playlistItemSchema,
+  pluginEntrySchema,
   type ShowState,
   themeSchema,
   timelineSchema,
@@ -13,6 +14,8 @@ import {
 import { z } from "zod";
 
 export type Log = (message: string) => void;
+
+const pluginInfoSchema = pluginEntrySchema.omit({ settings: true, state: true });
 
 type Key = keyof ShowState;
 
@@ -86,11 +89,12 @@ export function saveState(db: Database, state: ShowState, keys: Iterable<Key> = 
         case "plugins":
           rewrite(
             "plugins",
-            ["id", "settings", "state"],
-            Object.entries(state.plugins).map(([id, entry]) => [
+            ["id", "settings", "state", "info"],
+            Object.entries(state.plugins).map(([id, { settings, state, ...info }]) => [
               id,
-              JSON.stringify(entry.settings),
-              JSON.stringify(entry.state),
+              JSON.stringify(settings),
+              JSON.stringify(state),
+              JSON.stringify(info),
             ]),
           );
           break;
@@ -132,16 +136,19 @@ export function loadState(db: Database, log: Log = console.warn): ShowState | un
     Object.fromEntries(list.map((value) => [value.id, value]));
 
   const plugins: Record<string, PluginEntry> = {};
-  for (const row of db.query("SELECT id, settings, state FROM plugins").all() as {
+  for (const row of db.query("SELECT id, settings, state, info FROM plugins").all() as {
     id: string;
     settings: string;
     state: string;
+    info: string;
   }[]) {
-    // Status is runtime information; the plugin host (M2) recomputes it on load.
+    // The plugin host recomputes everything but settings and state when it reconciles the
+    // loaded plugins with this state, so an unreadable `info` only needs a placeholder.
+    const info = pluginInfoSchema.safeParse(JSON.parse(row.info));
     plugins[row.id] = {
+      ...(info.success ? info.data : { status: "missing", types: {} }),
       settings: JSON.parse(row.settings),
       state: JSON.parse(row.state),
-      status: "ok",
     };
   }
 

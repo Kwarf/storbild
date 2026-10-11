@@ -4,9 +4,22 @@
   "private": false,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./viewer": "./src/viewer.ts",
+    "./build": "./src/build.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@storbild/core": "workspace:*"
+  },
+  "peerDependencies": {
+    "lit": "^3.3.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "lit": "3.3.3",
+    "zod": "4.6.5"
   }
 }

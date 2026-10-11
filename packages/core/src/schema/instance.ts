@@ -15,11 +15,16 @@ export const instanceSchema = z.object({
   plugin: z.string().min(1),
   type: z.string().min(1),
   name: z.string().min(1),
-  /** Validated against the instance type's config schema by the plugin host (M2). */
+  /** Validated against the instance type's config schema, with defaults applied. */
   config: z.json(),
   configVersion: z.number().int().nonnegative(),
   background: instanceBackgroundSchema.optional(),
   /** Runtime data written by the plugin's server part. */
   state: z.json().optional(),
+  /**
+   * Set by the plugin host when the instance is broken: its plugin or type is unavailable, or
+   * its config fails migration or validation. Broken instances are skipped, never rendered.
+   */
+  error: z.string().optional(),
 });
 export type Instance = z.infer<typeof instanceSchema>;
