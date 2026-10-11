@@ -70,6 +70,28 @@ const migrations: string[] = [
     data TEXT NOT NULL CHECK (json_valid(data))
   ) STRICT;
   `,
+  // A font's `assetIds` become `faces` with a weight and style (ADR 0014). Files stored before
+  // had neither, so each becomes a regular face.
+  `
+  UPDATE themes SET data = json_set(
+    json_remove(data, '$.fonts.heading.assetIds'),
+    '$.fonts.heading.faces',
+    json((SELECT json_group_array(json_object('assetId', value, 'weight', 400, 'style', 'normal'))
+      FROM json_each(data, '$.fonts.heading.assetIds')))
+  ) WHERE json_type(data, '$.fonts.heading.assetIds') IS NOT NULL;
+  UPDATE themes SET data = json_set(
+    json_remove(data, '$.fonts.body.assetIds'),
+    '$.fonts.body.faces',
+    json((SELECT json_group_array(json_object('assetId', value, 'weight', 400, 'style', 'normal'))
+      FROM json_each(data, '$.fonts.body.assetIds')))
+  ) WHERE json_type(data, '$.fonts.body.assetIds') IS NOT NULL;
+  UPDATE themes SET data = json_set(
+    json_remove(data, '$.fonts.mono.assetIds'),
+    '$.fonts.mono.faces',
+    json((SELECT json_group_array(json_object('assetId', value, 'weight', 400, 'style', 'normal'))
+      FROM json_each(data, '$.fonts.mono.assetIds')))
+  ) WHERE json_type(data, '$.fonts.mono.assetIds') IS NOT NULL;
+  `,
 ];
 
 /** Opens (creating if needed) and migrates the database. `path` may be ":memory:". */

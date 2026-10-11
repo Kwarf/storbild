@@ -55,7 +55,8 @@ export class AssetPanel extends LitElement {
         border-radius: var(--sb-radius);
         overflow: hidden;
       }
-      .preview img {
+      .preview img,
+      .preview video {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
@@ -125,6 +126,7 @@ export class AssetPanel extends LitElement {
     const users = assetUsers(state, asset.id);
     const name = this.name ?? asset.name;
     const image = asset.mimeType.startsWith("image/");
+    const video = asset.mimeType.startsWith("video/");
     return html`
       <div class="panel-head">
         <h2>${asset.name}</h2>
@@ -135,7 +137,11 @@ export class AssetPanel extends LitElement {
           ? html`<div class="preview" aria-label="Preview">
               <img alt="" src=${`/assets/${asset.id}`} />
             </div>`
-          : nothing
+          : video
+            ? html`<div class="preview" aria-label="Preview">
+                <video src=${`/assets/${asset.id}`} muted loop autoplay playsinline></video>
+              </div>`
+            : nothing
       }
       <dl>
         <dt>Type</dt>

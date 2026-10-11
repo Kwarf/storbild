@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AssetMeta } from "@storbild/core";
@@ -34,6 +34,12 @@ const webp = (width: number, height: number) =>
     u24le(width - 1),
     u24le(height - 1),
   );
+
+/** The start of an MP4 file: an `ftyp` box. */
+const mp4 = bytes(u32be(24), "ftypisom", [0, 0, 2, 0], "isomiso2mp41");
+
+/** The start of a WebM file: an EBML header with DocType "webm". */
+const webm = bytes([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 1, 0x42, 0x82, 0x84], "webm");
 
 describe("sniff", () => {
   test.each<[string, Uint8Array, ReturnType<typeof sniff>]>([
@@ -100,6 +106,8 @@ describe("sniff", () => {
       { mimeType: "image/svg+xml", width: 64, height: 32 },
     ],
     ["woff2", bytes("wOF2", [0, 1, 0, 0]), { mimeType: "font/woff2" }],
+    ["mp4", mp4, { mimeType: "video/mp4" }],
+    ["webm", webm, { mimeType: "video/webm" }],
   ])("identifies %s", (_, file, expected) => {
     expect(sniff(file)).toEqual(expected);
   });
@@ -108,6 +116,8 @@ describe("sniff", () => {
     ["html", bytes("<!doctype html><svg>")],
     ["html with svg inside", bytes("<html><body><svg></svg>")],
     ["text", bytes("hello")],
+    ["matroska", bytes([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x88], "matroska")],
+    ["a QuickTime movie", bytes(u32be(20), "ftypqt  ", [0, 0, 2, 0], "qt  ")],
     ["empty", new Uint8Array()],
   ])("refuses %s", (_, file) => {
     expect(sniff(file)).toBeUndefined();
@@ -117,7 +127,11 @@ describe("sniff", () => {
 describe("asset uploads", () => {
   const dir = mkdtempSync(join(tmpdir(), "storbild-assets-"));
   afterAll(() => rmSync(dir, { recursive: true }));
-  const { app, hub, assets } = createTestAdminApp({ assetsDir: dir, maxUploadBytes: 4096 });
+  const { app, hub, assets } = createTestAdminApp({
+    assetsDir: dir,
+    maxUploadBytes: 4096,
+    maxVideoUploadBytes: 64 * 1024,
+  });
   const viewer = createViewerApp({ hub, now: () => 0, ...(assets && { assets }) });
   let cookie: string;
   beforeAll(async () => {
@@ -129,22 +143,28 @@ describe("asset uploads", () => {
     cookie = res.headers.get("Set-Cookie")?.split(";")[0] as string;
   });
 
-  const upload = (file: Blob, extra: Record<string, string | Blob> = {}) => {
-    const form = new FormData();
-    form.set("file", file, "logo.png");
-    for (const [key, value] of Object.entries(extra)) form.set(key, value);
-    return app.request("/api/assets", {
+  const headers = () => ({ Cookie: cookie, Origin: "http://localhost" });
+  const upload = (body: Blob | ReadableStream<Uint8Array>, name = "logo.png") =>
+    app.request(`/api/assets?name=${encodeURIComponent(name)}`, {
       method: "POST",
-      headers: { Cookie: cookie, Origin: "http://localhost" },
-      body: form,
+      headers: headers(),
+      body,
     });
-  };
+  const putThumbnail = (id: string, body: Uint8Array) =>
+    app.request(`/api/assets/${id}/thumbnail`, { method: "PUT", headers: headers(), body });
+  /** A body without a Content-Length, sent in chunks. */
+  const chunked = (bytes: Uint8Array, size = 1024) =>
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let i = 0; i < bytes.length; i += size) controller.enqueue(bytes.slice(i, i + size));
+        controller.close();
+      },
+    });
+  const temporaryFiles = () => readdirSync(dir).filter((name) => name.endsWith(".tmp"));
   const id = new Bun.CryptoHasher("sha256").update(png).digest("hex");
 
   test("stores a file by its hash and registers it with its size", async () => {
-    const res = await upload(new Blob([png], { type: "text/html" }), {
-      thumbnail: new Blob([webp(1, 1)]),
-    });
+    const res = await upload(new Blob([png], { type: "text/html" }));
     expect(res.status).toBe(200);
     const asset = (await res.json()) as AssetMeta;
     expect(asset).toEqual({
@@ -154,16 +174,23 @@ describe("asset uploads", () => {
       size: png.length,
       width: 1,
       height: 1,
-      thumbnail: true,
       createdAt: 1_000_000,
     });
     expect(hub.state.assets[id]).toEqual(asset);
     expect(existsSync(join(dir, id))).toBe(true);
   });
 
+  test("takes a WebP thumbnail of a stored file", async () => {
+    expect((await putThumbnail(id, webp(1, 1))).status).toBe(204);
+    expect(hub.state.assets[id]?.thumbnail).toBe(true);
+    expect((await putThumbnail(id, png)).status).toBe(400);
+    expect((await putThumbnail("0".repeat(64), webp(1, 1))).status).toBe(400);
+    expect((await putThumbnail(id, new Uint8Array(300 * 1024))).status).toBe(413);
+  });
+
   test("the same file again keeps the first upload's name", async () => {
     const revision = hub.state.revision;
-    const res = await upload(new Blob([png]), { name: "Other" });
+    const res = await upload(new Blob([png]), "Other");
     expect(((await res.json()) as AssetMeta).name).toBe("logo.png");
     expect(hub.state.revision).toBe(revision);
   });
@@ -198,21 +225,39 @@ describe("asset uploads", () => {
     const big = new Uint8Array(5000);
     big.set(png);
     expect((await upload(new Blob([big]))).status).toBe(413);
+    // Without a Content-Length, the stream is cut off once it passes the limit.
+    expect((await upload(chunked(big))).status).toBe(413);
+    expect(temporaryFiles()).toEqual([]);
+  });
+
+  test("takes a video up to the video limit", async () => {
+    const video = new Uint8Array(32 * 1024);
+    video.set(mp4);
+    const res = await upload(chunked(video), "loop.mp4");
+    expect(res.status).toBe(200);
+    const asset = (await res.json()) as AssetMeta;
+    expect(asset.mimeType).toBe("video/mp4");
+    expect(asset.size).toBe(video.length);
+    expect(asset.id).toBe(new Bun.CryptoHasher("sha256").update(video).digest("hex"));
+    expect(new Uint8Array(await Bun.file(join(dir, asset.id)).arrayBuffer())).toEqual(video);
+
+    const big = new Uint8Array(65 * 1024);
+    big.set(webm);
+    expect((await upload(chunked(big))).status).toBe(413);
+    expect(temporaryFiles()).toEqual([]);
   });
 
   test("needs a session and a matching origin", async () => {
-    const form = new FormData();
-    form.set("file", new Blob([png]));
     const anonymous = await app.request("/api/assets", {
       method: "POST",
       headers: { Origin: "http://localhost" },
-      body: form,
+      body: png,
     });
     expect(anonymous.status).toBe(401);
     const foreign = await app.request("/api/assets", {
       method: "POST",
       headers: { Cookie: cookie, Origin: "http://evil.example" },
-      body: form,
+      body: png,
     });
     expect(foreign.status).toBe(403);
   });
@@ -232,7 +277,7 @@ test("on start, the store removes files the show doesn't know", async () => {
     const hub = createTestHub();
     const store = new AssetStore({ dir, hub, now: () => 0 });
     store.start();
-    const result = await store.upload(new Blob([png]), "keep.png");
+    const result = await store.upload(new Blob([png]).stream(), "keep.png");
     if (!result.ok) throw new Error("upload failed");
     const orphan = "f".repeat(64);
     writeFileSync(join(dir, orphan), "x");

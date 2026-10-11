@@ -104,6 +104,40 @@ function avif(bytes: Uint8Array, view: DataView): Sniffed | undefined {
   return { mimeType: "image/avif" };
 }
 
+/** Brands of the ISO base media files a browser plays as MP4 video. */
+const mp4Brands = new Set([
+  "isom",
+  "iso2",
+  "iso4",
+  "iso5",
+  "iso6",
+  "mp41",
+  "mp42",
+  "avc1",
+  "dash",
+  "M4V ",
+]);
+
+function mp4(bytes: Uint8Array, view: DataView): Sniffed | undefined {
+  if (ascii(bytes, 4, 4) !== "ftyp") return undefined;
+  const boxEnd = Math.min(view.byteLength >= 4 ? view.getUint32(0) : 0, bytes.length);
+  const brands = [ascii(bytes, 8, 4)];
+  for (let i = 16; i + 4 <= boxEnd; i += 4) brands.push(ascii(bytes, i, 4));
+  return brands.some((brand) => mp4Brands.has(brand)) ? { mimeType: "video/mp4" } : undefined;
+}
+
+function webm(bytes: Uint8Array): Sniffed | undefined {
+  if (!startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return undefined;
+  // The EBML header's DocType element (0x4282) names the format.
+  const header = bytes.subarray(0, 64);
+  for (let i = 4; i + 7 <= header.length; i++) {
+    if (header[i] === 0x42 && header[i + 1] === 0x82 && ascii(header, i + 3, 4) === "webm") {
+      return { mimeType: "video/webm" };
+    }
+  }
+  return undefined;
+}
+
 /** A pixel length from an SVG attribute: unitless or px only. */
 function svgLength(value: string | undefined): number {
   const match = value?.trim().match(/^(\d+(?:\.\d+)?)(px)?$/);
@@ -137,7 +171,8 @@ function woff2(bytes: Uint8Array): Sniffed | undefined {
 /**
  * Identifies an uploaded file by its content, never by the name or type the client gave, and
  * reads an image's size from its header. Returns undefined for anything not allowed: PNG,
- * JPEG, GIF, WebP, AVIF, SVG and woff2.
+ * JPEG, GIF, WebP, AVIF, SVG, woff2, MP4 and WebM (ADR 0014). A video is recognised from its
+ * first bytes alone.
  */
 export function sniff(bytes: Uint8Array): Sniffed | undefined {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -148,6 +183,8 @@ export function sniff(bytes: Uint8Array): Sniffed | undefined {
       gif(bytes, view) ??
       webp(bytes, view) ??
       avif(bytes, view) ??
+      mp4(bytes, view) ??
+      webm(bytes) ??
       woff2(bytes) ??
       svg(bytes)
     );

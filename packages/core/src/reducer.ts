@@ -8,7 +8,8 @@ import type { Instance } from "./schema/instance.ts";
 import { type OverlayPlacement, overlaySlotSchema } from "./schema/overlay.ts";
 import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
-import type { ShowState } from "./schema/state.ts";
+import { defaultThemeValues, type ShowState } from "./schema/state.ts";
+import type { Theme } from "./schema/theme.ts";
 import { isPlayableScene, resolveTimeline } from "./timeline.ts";
 
 export interface CommandContext {
@@ -226,6 +227,11 @@ function reduce(
       if (state.assets[command.payload.id]) return { state };
       return { state: withAsset(state, command.payload) };
 
+    case "asset.setThumbnail": {
+      const { id } = command.payload;
+      return { state: withAsset(state, { ...getAsset(state, id), thumbnail: true }) };
+    }
+
     case "plugin.setState": {
       const { plugin, state: value } = command.payload;
       return { state: withPlugin(state, plugin, { ...getPlugin(state, plugin), state: value }) };
@@ -272,6 +278,43 @@ function reduce(
     case "overlay.remove": {
       const placement = getPlacement(state, command.payload.instanceId);
       return { state: withPlacement(state, placement, undefined, true) };
+    }
+
+    case "theme.create": {
+      const theme = checkTheme(state, {
+        id: ctx.newId(),
+        ...defaultThemeValues(),
+        ...definedOnly(command.payload),
+      } as Theme);
+      return {
+        state: { ...state, themes: { ...state.themes, [theme.id]: theme } },
+        id: theme.id,
+      };
+    }
+
+    case "theme.update": {
+      const { id, ...changes } = command.payload;
+      const theme = checkTheme(state, merge(getTheme(state, id), changes));
+      return { state: { ...state, themes: { ...state.themes, [id]: theme } } };
+    }
+
+    case "theme.delete": {
+      const { id } = command.payload;
+      getTheme(state, id);
+      if (state.activeThemeId === id) {
+        throw new CommandError("invalid", `theme ${id} is active; activate another one first`);
+      }
+      const { [id]: _, ...themes } = state.themes;
+      const cues = state.cues.filter(
+        (cue) => cue.fired || cue.action.type !== "activateTheme" || cue.action.themeId !== id,
+      );
+      return { state: { ...state, themes, cues } };
+    }
+
+    case "theme.activate": {
+      const { id } = command.payload;
+      getTheme(state, id);
+      return { state: { ...state, activeThemeId: id } };
     }
 
     case "live.take":
@@ -412,6 +455,41 @@ function checkCue(state: ShowState, at: number, action: CueAction, ctx: CommandC
   } else {
     checkScene(state, action.instanceId);
   }
+}
+
+function getTheme(state: ShowState, id: string): Theme {
+  const theme = state.themes[id];
+  if (!theme) throw new CommandError("not_found", `theme ${id} not found`);
+  return theme;
+}
+
+/** A theme's files must exist and be of the right kind, and a scene background a scene. */
+function checkTheme(state: ShowState, theme: Theme): Theme {
+  const { background } = theme;
+  if (background.type === "image") checkAsset(state, background.assetId, "image/", "background");
+  if (background.type === "video") checkAsset(state, background.assetId, "video/", "background");
+  if (background.type === "scene") {
+    getInstance(state, background.instanceId);
+    if (typeInfo(state, background.instanceId)?.kind !== "scene") {
+      throw new CommandError("invalid", `instance ${background.instanceId} is not a scene`);
+    }
+  }
+  for (const [role, font] of Object.entries(theme.fonts)) {
+    for (const face of font?.faces ?? []) {
+      checkAsset(state, face.assetId, "font/woff2", `${role} font`);
+    }
+  }
+  return theme;
+}
+
+function checkAsset(state: ShowState, id: string, mimePrefix: string, use: string) {
+  if (!getAsset(state, id).mimeType.startsWith(mimePrefix)) {
+    throw new CommandError("invalid", `asset ${id} can't be used as the ${use}`);
+  }
+}
+
+function definedOnly<T extends object>(value: T): T {
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as T;
 }
 
 function getAsset(state: ShowState, id: string): AssetMeta {

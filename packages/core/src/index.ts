@@ -1,4 +1,5 @@
 export * from "./assets.ts";
+export * from "./background.ts";
 export * from "./clock.ts";
 export * from "./commands.ts";
 export { type Config, ConfigError, parseConfig } from "./config.ts";

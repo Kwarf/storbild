@@ -30,6 +30,7 @@ describe("parseConfig", () => {
       dataDir: "./data",
       pluginPaths: [],
       maxUploadBytes: 25 * 1024 * 1024,
+      maxVideoUploadBytes: 200 * 1024 * 1024,
     });
   });
 
@@ -43,6 +44,7 @@ describe("parseConfig", () => {
       STORBILD_ADMIN_PASSWORD_HASH: HASH,
       STORBILD_PLUGIN_PATHS: "/a:/b",
       STORBILD_MAX_UPLOAD_MB: "0.5",
+      STORBILD_MAX_VIDEO_UPLOAD_MB: "1000",
       STORBILD_VIEWER_URL: "https://screen.example.org",
       STORBILD_ADMIN_URL: "https://admin.example.org",
     });
@@ -58,6 +60,7 @@ describe("parseConfig", () => {
       dataDir: "/var/lib/storbild",
       pluginPaths: ["/a", "/b"],
       maxUploadBytes: 512 * 1024,
+      maxVideoUploadBytes: 1000 * 1024 * 1024,
     });
   });
 

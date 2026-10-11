@@ -487,6 +487,20 @@ describe("assets", () => {
     expect(s.state.assets[id]?.name).toBe("Logo");
   });
 
+  test("asset.setThumbnail marks a known asset as having a thumbnail", () => {
+    const s = setup();
+    const id = hash("1");
+    s.run({ type: "asset.add", payload: meta(id) });
+    s.run({ type: "asset.setThumbnail", payload: { id } });
+    expect(s.state.assets[id]?.thumbnail).toBe(true);
+    expect(
+      errorOf(() => s.run({ type: "asset.setThumbnail", payload: { id: hash("2") } })).code,
+    ).toBe("not_found");
+    expect(commandSchema.safeParse({ type: "asset.setThumbnail", payload: { id } }).success).toBe(
+      false,
+    );
+  });
+
   test("the admin command schema does not accept asset.add", () => {
     const parsed = commandSchema.safeParse({ type: "asset.add", payload: meta(hash("1")) });
     expect(parsed.success).toBe(false);
@@ -518,7 +532,10 @@ describe("assets", () => {
       themes: {
         [theme.id]: {
           ...theme,
-          fonts: { ...theme.fonts, body: { family: "X", assetIds: [inTheme] } },
+          fonts: {
+            ...theme.fonts,
+            body: { family: "X", faces: [{ assetId: inTheme, weight: 400, style: "normal" }] },
+          },
         },
       },
     };
@@ -610,5 +627,142 @@ describe("overlays", () => {
     s.run({ type: "overlay.place", payload: { instanceId: b, slot: "top-bar" } });
     s.run({ type: "overlay.remove", payload: { instanceId: a } });
     expect(placed(s)).toEqual([[b, "top-bar", 0, true]]);
+  });
+});
+
+describe("themes", () => {
+  const image = (id: string) => ({
+    id,
+    name: "bg.png",
+    mimeType: "image/png",
+    size: 1,
+    width: 1,
+    height: 1,
+    createdAt: 1,
+  });
+  const font = (id: string) => ({ ...image(id), name: "f.woff2", mimeType: "font/woff2" });
+
+  test("theme.create fills in the default values and theme.activate switches to it", () => {
+    const s = setup();
+    const id = s.run({
+      type: "theme.create",
+      payload: {
+        name: "Party",
+        colors: { text: "#000", muted: "#333", accent: "red", surface: "#eee" },
+      },
+    }) as string;
+    const theme = s.state.themes[id];
+    expect(theme?.name).toBe("Party");
+    expect(theme?.colors.accent).toBe("red");
+    expect(theme?.background).toEqual({ type: "color", color: "#000000" });
+    expect(theme?.fonts.body.family).toBe("sans-serif");
+    s.run({ type: "theme.activate", payload: { id } });
+    expect(s.state.activeThemeId).toBe(id);
+  });
+
+  test("theme.update replaces given parts and clears with null", () => {
+    const s = setup();
+    const id = s.state.activeThemeId;
+    s.run({ type: "theme.update", payload: { id, safeArea: 64, customCss: "x {}" } });
+    s.run({
+      type: "theme.update",
+      payload: { id, name: "Main", background: { type: "color", color: "#123" }, customCss: null },
+    });
+    const theme = s.state.themes[id];
+    expect(theme?.name).toBe("Main");
+    expect(theme?.background).toEqual({ type: "color", color: "#123" });
+    expect(theme?.safeArea).toBe(64);
+    expect(theme && "customCss" in theme).toBe(false);
+  });
+
+  test("unknown themes are not found", () => {
+    const s = setup();
+    for (const command of [
+      { type: "theme.update", payload: { id: "nope", name: "X" } },
+      { type: "theme.delete", payload: { id: "nope" } },
+      { type: "theme.activate", payload: { id: "nope" } },
+    ] as Command[]) {
+      expect(errorOf(() => s.run(command)).code).toBe("not_found");
+    }
+  });
+
+  test("files must exist and be of the right kind", () => {
+    const s = setup();
+    const [png, woff] = [hash("1"), hash("2")];
+    s.run({ type: "asset.add", payload: image(png) });
+    s.run({ type: "asset.add", payload: font(woff) });
+    const id = s.state.activeThemeId;
+    const update = (payload: Omit<Extract<Command, { type: "theme.update" }>["payload"], "id">) =>
+      errorOf(() => s.run({ type: "theme.update", payload: { id, ...payload } }));
+
+    expect(update({ background: { type: "image", assetId: hash("9"), fit: "cover" } }).code).toBe(
+      "not_found",
+    );
+    expect(update({ background: { type: "video", assetId: png } }).code).toBe("invalid");
+    const faces = (assetId: string) => ({
+      heading: { family: "Display", faces: [{ assetId, weight: 700, style: "normal" as const }] },
+      body: { family: "sans-serif" },
+    });
+    expect(update({ fonts: faces(png) }).code).toBe("invalid");
+
+    s.run({
+      type: "theme.update",
+      payload: {
+        id,
+        background: { type: "image", assetId: png, fit: "contain", dim: 0.3 },
+        fonts: faces(woff),
+      },
+    });
+    expect(s.state.themes[id]?.fonts.heading.faces?.[0]?.assetId).toBe(woff);
+  });
+
+  test("a scene background must be a scene instance", () => {
+    const s = setup();
+    const scene = s.run({ type: "instance.create", payload: markdown }) as string;
+    const overlay = s.run({
+      type: "instance.create",
+      payload: { plugin: "markdown", type: "counter", name: "C", config: { count: 1 } },
+    }) as string;
+    const id = s.state.activeThemeId;
+    const error = errorOf(() =>
+      s.run({
+        type: "theme.update",
+        payload: { id, background: { type: "scene", instanceId: overlay } },
+      }),
+    );
+    expect(error.code).toBe("invalid");
+    s.run({
+      type: "theme.update",
+      payload: { id, background: { type: "scene", instanceId: scene } },
+    });
+    expect(s.state.themes[id]?.background).toEqual({ type: "scene", instanceId: scene });
+  });
+
+  test("theme.delete refuses the active theme and drops the unfired cues for it", () => {
+    const s = setup();
+    const active = s.state.activeThemeId;
+    expect(errorOf(() => s.run({ type: "theme.delete", payload: { id: active } })).code).toBe(
+      "invalid",
+    );
+    const other = s.run({ type: "theme.create", payload: { name: "Other" } }) as string;
+    const keep = s.run({
+      type: "cue.create",
+      payload: { at: 5_000, action: { type: "activateTheme", themeId: active } },
+    });
+    s.run({
+      type: "cue.create",
+      payload: { at: 6_000, action: { type: "activateTheme", themeId: other } },
+    });
+    const fired = s.run({
+      type: "cue.create",
+      payload: { at: 7_000, action: { type: "activateTheme", themeId: other } },
+    });
+    const state = {
+      ...s.state,
+      cues: s.state.cues.map((cue) => (cue.id === fired ? { ...cue, fired: true } : cue)),
+    };
+    const next = applyCommand(state, { type: "theme.delete", payload: { id: other } }, s.ctx).state;
+    expect(Object.keys(next.themes)).toEqual([active]);
+    expect(next.cues.map((cue) => cue.id)).toEqual([keep as string, fired as string]);
   });
 });

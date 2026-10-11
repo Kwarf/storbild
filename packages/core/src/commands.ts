@@ -5,6 +5,7 @@ import { cueActionSchema } from "./schema/cue.ts";
 import { instanceBackgroundSchema } from "./schema/instance.ts";
 import { overlaySlotSchema } from "./schema/overlay.ts";
 import { showSettingsSchema } from "./schema/settings.ts";
+import { themeSchema } from "./schema/theme.ts";
 import { interruptBelowSchema } from "./schema/timeline.ts";
 
 function command<T extends string, P extends z.ZodType>(type: T, payload: P) {
@@ -100,6 +101,25 @@ export const commandSchema = z.discriminatedUnion("type", [
     }),
   ),
   command("overlay.remove", z.object({ instanceId: idSchema })),
+  // Themes (ADR 0014). `background`, `fonts` and `colors` are replaced whole when given; a new
+  // theme takes the default theme's values for the parts it leaves out.
+  command("theme.create", themeSchema.omit({ id: true }).partial().required({ name: true })),
+  command(
+    "theme.update",
+    z.object({
+      id: idSchema,
+      name: themeSchema.shape.name.optional(),
+      background: themeSchema.shape.background.optional(),
+      fonts: themeSchema.shape.fonts.optional(),
+      colors: themeSchema.shape.colors.optional(),
+      safeArea: themeSchema.shape.safeArea.nullable(),
+      gap: themeSchema.shape.gap.nullable(),
+      customCss: themeSchema.shape.customCss.nullable(),
+    }),
+  ),
+  /** Refused for the active theme; removes the unfired cues that would activate it. */
+  command("theme.delete", z.object({ id: idSchema })),
+  command("theme.activate", z.object({ id: idSchema })),
   // Live control (ADR 0006). Without `durationMs`, a take or interrupt holds until cleared.
   command("live.take", z.object({ instanceId: idSchema, durationMs: durationMsSchema.optional() })),
   command(
@@ -144,5 +164,7 @@ export const hostCommandSchema = z.discriminatedUnion("type", [
   command("instance.setState", z.object({ id: idSchema, state: z.json() })),
   /** Registers an uploaded file; the asset store has already written it. */
   command("asset.add", assetMetaSchema),
+  /** Marks that the asset store holds a thumbnail for the asset. */
+  command("asset.setThumbnail", z.object({ id: assetIdSchema })),
 ]);
 export type HostCommand = z.infer<typeof hostCommandSchema>;

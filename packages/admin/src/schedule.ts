@@ -94,8 +94,9 @@ export function actionText(action: CueAction): string {
 export interface CueDraft {
   /** A `datetime-local` value. */
   at: string;
-  type: "take" | "interrupt";
+  type: CueAction["type"];
   instanceId: string;
+  themeId: string;
   /** Seconds or m:ss; blank holds until cleared. */
   duration: string;
   below: InterruptBelow;
@@ -105,18 +106,23 @@ export const emptyDraft = (): CueDraft => ({
   at: "",
   type: "interrupt",
   instanceId: "",
+  themeId: "",
   duration: "",
   below: "hide",
 });
 
-/** The draft of an existing take or interrupt cue. */
-export function draftOf(cue: Cue): CueDraft | undefined {
+/** The draft of an existing cue. */
+export function draftOf(cue: Cue): CueDraft {
   const { action } = cue;
-  if (action.type === "activateTheme") return undefined;
+  const at = toLocalInput(cue.at, { seconds: true });
+  if (action.type === "activateTheme") {
+    return { ...emptyDraft(), at, type: action.type, themeId: action.themeId };
+  }
   return {
-    at: toLocalInput(cue.at, { seconds: true }),
+    at,
     type: action.type,
     instanceId: action.instanceId,
+    themeId: "",
     duration: action.durationMs === undefined ? "" : formatDuration(action.durationMs),
     below: action.type === "interrupt" ? (action.below ?? "hide") : "hide",
   };
@@ -126,6 +132,10 @@ export function draftOf(cue: Cue): CueDraft | undefined {
 export function cueOf(draft: CueDraft): { at: number; action: CueAction } | string {
   const at = fromLocalInput(draft.at);
   if (at === undefined) return "Choose a date and time.";
+  if (draft.type === "activateTheme") {
+    if (!draft.themeId) return "Choose a theme.";
+    return { at, action: { type: "activateTheme", themeId: draft.themeId } };
+  }
   if (!draft.instanceId) return "Choose a scene.";
   const durationMs = parseDuration(draft.duration);
   if (durationMs === null) return "Enter a duration as seconds or m:ss, or leave it blank.";

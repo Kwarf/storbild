@@ -40,7 +40,10 @@ describe("assetUsers", () => {
         font: {
           ...theme,
           id: "font",
-          fonts: { ...theme.fonts, mono: { family: "M", assetIds: [id] } },
+          fonts: {
+            ...theme.fonts,
+            mono: { family: "M", faces: [{ assetId: id, weight: 400, style: "normal" }] },
+          },
         },
         plain: theme,
       },

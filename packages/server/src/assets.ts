@@ -2,7 +2,7 @@ import { mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { AssetMeta } from "@storbild/core";
 import { Hono } from "hono";
-import { sniff } from "./sniff.ts";
+import { type Sniffed, sniff } from "./sniff.ts";
 import type { StateHub } from "./state-hub.ts";
 
 /** The largest thumbnail the admin may store with an upload. */
@@ -10,9 +10,19 @@ export const MAX_THUMBNAIL_BYTES = 256 * 1024;
 
 const assetId = /^[0-9a-f]{64}$/;
 
+/** How many bytes the first sniff reads, which is enough to recognise a video. */
+const HEAD_BYTES = 256 * 1024;
+
 export type UploadResult =
   | { ok: true; asset: AssetMeta }
-  | { ok: false; status: 415; error: "unsupported_type"; message: string };
+  | { ok: false; status: 415; error: "unsupported_type"; message: string }
+  | { ok: false; status: 413; error: "too_large"; limit: number };
+
+/** The largest file, in bytes, and the largest video (ADR 0014). Absent means no limit. */
+export interface UploadLimits {
+  file?: number;
+  video?: number;
+}
 
 export interface AssetStoreOptions {
   /** The directory files are kept in, named by content hash. */
@@ -59,44 +69,104 @@ export class AssetStore {
     this.#unwatch?.();
   }
 
-  /** Stores a file and registers it, or refuses a type that isn't allowed. */
-  async upload(file: Blob, name: string, thumbnail?: Blob): Promise<UploadResult> {
-    const bytes = await file.bytes();
-    const sniffed = sniff(bytes);
-    if (!sniffed) {
-      return {
-        ok: false,
-        status: 415,
-        error: "unsupported_type",
-        message: "Only PNG, JPEG, GIF, WebP, AVIF, SVG and woff2 files can be uploaded.",
-      };
-    }
-    const id = new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
-    await this.#write(join(this.#dir, id), bytes);
+  /**
+   * Streams an upload to disk while hashing it, so no file is ever held whole in memory, and
+   * registers it (ADR 0014). The type is judged from the first bytes, which also decides the
+   * size limit; an upload is cut off as soon as it passes it, or refused when its type isn't
+   * allowed.
+   */
+  async upload(
+    body: ReadableStream<Uint8Array>,
+    name: string,
+    limits: UploadLimits = {},
+  ): Promise<UploadResult> {
+    const reader = body.getReader();
+    const temporary = join(this.#dir, `${crypto.randomUUID()}.tmp`);
+    const hasher = new Bun.CryptoHasher("sha256");
+    const writer = Bun.file(temporary).writer();
+    const abandon = async () => {
+      await reader.cancel().catch(() => {});
+      await Promise.resolve(writer.end()).catch(() => {});
+      rmSync(temporary, { force: true });
+    };
 
-    let hasThumbnail = false;
-    if (thumbnail && thumbnail.size <= MAX_THUMBNAIL_BYTES) {
-      const thumb = await thumbnail.bytes();
-      // A thumbnail that isn't a WebP image is dropped; the admin then shows the file itself.
-      if (sniff(thumb)?.mimeType === "image/webp") {
-        await this.#write(this.#thumbnailPath(id), thumb);
-        hasThumbnail = true;
+    let size = 0;
+    let head: Uint8Array[] = [];
+    let headSize = 0;
+    let sniffed: Sniffed | undefined;
+    let limit: number | undefined;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (value) {
+          hasher.update(value);
+          writer.write(value);
+          size += value.length;
+          if (!sniffed) {
+            head.push(value);
+            headSize += value.length;
+          }
+        }
+        if (!sniffed && (done || headSize >= HEAD_BYTES)) {
+          sniffed = sniff(Buffer.concat(head));
+          head = [];
+          if (!sniffed) {
+            await abandon();
+            return {
+              ok: false,
+              status: 415,
+              error: "unsupported_type",
+              message:
+                "Only PNG, JPEG, GIF, WebP, AVIF, SVG, woff2, MP4 and WebM files can be uploaded.",
+            };
+          }
+          limit = sniffed.mimeType.startsWith("video/") ? limits.video : limits.file;
+        }
+        if (limit !== undefined && size > limit) {
+          await abandon();
+          return { ok: false, status: 413, error: "too_large", limit };
+        }
+        if (done) break;
       }
+      await writer.end();
+    } catch (error) {
+      await abandon();
+      throw error;
     }
+    if (!sniffed) throw new Error("unreachable: an upload ends with its type judged");
+    // Some image headers lie past the first bytes; anything but a video is small enough to
+    // read whole for its size.
+    if (!sniffed.mimeType.startsWith("video/")) {
+      sniffed = sniff(await Bun.file(temporary).bytes()) ?? sniffed;
+    }
+    const id = hasher.digest("hex");
+    renameSync(temporary, join(this.#dir, id));
 
     this.#hub.dispatchHost({
       type: "asset.add",
       payload: {
         id,
         name: name.trim().slice(0, 200) || "Untitled",
-        size: bytes.length,
+        size,
         ...sniffed,
-        ...(hasThumbnail && { thumbnail: true }),
         createdAt: this.#now(),
       },
     });
     this.#known.add(id);
     return { ok: true, asset: this.#hub.state.assets[id] as AssetMeta };
+  }
+
+  /**
+   * Stores the admin's thumbnail of an asset, a WebP image of at most `MAX_THUMBNAIL_BYTES`.
+   * Returns false for an unknown asset or a thumbnail that isn't one.
+   */
+  async setThumbnail(id: string, thumbnail: Uint8Array): Promise<boolean> {
+    const asset = assetId.test(id) ? this.#hub.state.assets[id] : undefined;
+    if (!asset || thumbnail.length > MAX_THUMBNAIL_BYTES) return false;
+    if (sniff(thumbnail)?.mimeType !== "image/webp") return false;
+    await this.#write(this.#thumbnailPath(id), thumbnail);
+    if (!asset.thumbnail) this.#hub.dispatchHost({ type: "asset.setThumbnail", payload: { id } });
+    return true;
   }
 
   /** The stored file of an asset in the show. */

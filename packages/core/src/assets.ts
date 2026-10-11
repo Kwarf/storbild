@@ -35,7 +35,9 @@ export function assetUsers(state: ShowState, id: string): AssetUser[] {
     const { background, fonts } = theme;
     const inBackground =
       (background.type === "image" || background.type === "video") && background.assetId === id;
-    const inFonts = Object.values(fonts).some((font) => font?.assetIds?.includes(id));
+    const inFonts = Object.values(fonts).some((font) =>
+      font?.faces?.some((face) => face.assetId === id),
+    );
     if (inBackground || inFonts) users.push({ kind: "theme", id: theme.id, name: theme.name });
   }
   return users;

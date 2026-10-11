@@ -11,6 +11,8 @@ interface FieldBase {
   required: boolean;
   /** `null` is a valid value. */
   nullable: boolean;
+  /** Shown in an empty text or number input, such as the value used when it is left blank. */
+  placeholder?: string;
   default?: unknown;
 }
 

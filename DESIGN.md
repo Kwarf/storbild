@@ -257,11 +257,14 @@ interface Theme {
   customCss?: string;          // escape hatch, viewer-scoped, at your own risk
 }
 
-interface FontRef { family: string; assetIds?: string[] }   // uploaded woff2 files
+interface FontRef {
+  family: string;              // without faces: a font the screens have, e.g. "sans-serif"
+  faces?: { assetId: string; weight: number; style: "normal" | "italic" }[];  // uploaded woff2
+}
 ```
 
-- Several themes can be stored, with one active (`activeThemeId`). Switching themes is just a state patch.
-- **The background is a compositor layer**, not a plugin concern. Scenes are transparent by default. A scene type can declare `background: "own"` (for example a full-bleed slideshow), in which case the compositor hides or dims the theme background while it is live. Per instance, `Instance.background` overrides this.
+- Several themes can be stored, with one active (`activeThemeId`). Switching themes is just a state patch. The active theme can't be deleted.
+- **The background is a compositor layer**, not a plugin concern. Scenes are transparent by default. A scene type can declare `background: "own"` (for example a full-bleed slideshow), in which case the compositor fades the theme background out while it is live. Per instance, `Instance.background` overrides this: the theme's, none, or an image drawn beneath the scene.
 - When two consecutive scenes both use the theme background, it does **not** transition; only the content crossfades.
 - Theme values are exposed as CSS custom properties on the viewer root. They inherit through shadow DOM:
 
@@ -271,13 +274,16 @@ interface FontRef { family: string; assetIds?: string[] }   // uploaded woff2 fi
 --sb-safe-area; --sb-gap;
 ```
 
-- Fonts are declared with `@font-face` in the viewer document. The viewer awaits `document.fonts.load()` before the first render and after a theme change, so no fallback font is ever shown.
+- Uploaded fonts are added to the viewer document with the FontFace API, under a family name unique to their files. The compositor applies a theme only once its fonts have loaded (or after 5 s), keeping the previous theme until then and drawing nothing before the first, so no fallback font is ever shown.
+- `customCss` applies inside the compositor's shadow root, after its own styles.
+
+The commands, fonts, the background layer, scene backgrounds, the interrupt cover and the Theme page are specified in [ADR 0014](docs/decisions/0014-theming.md).
 
 ### 4.7 Assets
 
-- Uploaded files (images, fonts, and later video) are stored on disk named by their SHA-256, with metadata (name, MIME type, size, dimensions, whether there is a thumbnail) in SQLite. The admin makes the thumbnails, so the server needs no image library.
+- Uploaded files (images, fonts and MP4/WebM video) are stored on disk named by their SHA-256, with metadata (name, MIME type, size, dimensions, whether there is a thumbnail) in SQLite. The admin makes the thumbnails, so the server needs no image library.
 - Assets are served immutably at `/assets/<hash>` with long cache headers, on both apps. Replacing an asset (a new hash, with the instances referencing it updated) is deferred.
-- The type is sniffed from the content and the size is limited (`STORBILD_MAX_UPLOAD_MB`) on upload. User uploads are never served as a page (`nosniff` and a sandboxing CSP).
+- The type is sniffed from the content and the size is limited (`STORBILD_MAX_UPLOAD_MB`, and `STORBILD_MAX_VIDEO_UPLOAD_MB` for video) on upload. Uploads are streamed to disk, never held whole in memory ([ADR 0014](docs/decisions/0014-theming.md)). User uploads are never served as a page (`nosniff` and a sandboxing CSP).
 - An asset that an instance or theme uses can't be deleted.
 
 Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
@@ -357,7 +363,7 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
-M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted. `overlay.place` takes an instance of an overlay type and a slot, each instance is placed at most once, and `overlay.update` moves a placement within or across slots ([ADR 0012](docs/decisions/0012-overlays.md)).
+M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted. `overlay.place` takes an instance of an overlay type and a slot, each instance is placed at most once, and `overlay.update` moves a placement within or across slots ([ADR 0012](docs/decisions/0012-overlays.md)). A theme's files must exist and be of the right kind, the active theme can't be deleted, and deleting a theme removes the unfired cues that would activate it ([ADR 0014](docs/decisions/0014-theming.md)).
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -400,7 +406,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 ### 6.2 A plugin has three faces
 
 - **Viewer:** Lit elements extending `StorbildScene<Config, Settings>` or `StorbildOverlay<...>`.
-  - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`, theme access).
+  - Props: `config`, `settings`, `state` (the instance's runtime data), `pluginState` (the plugin's), `ctx` (`serverNow()`, `assetUrl(id)`). The theme reaches plugins as the CSS variables of §4.6 ([ADR 0014](docs/decisions/0014-theming.md)).
   - Lifecycle: `prepare()` (preload; awaited before the scene is used), `enter(at)`, `exit(at)`, `dispose()`.
   - Overlays may override `staleAt()`, the server time at which their data goes stale; the compositor then fades them out and closes the gap ([ADR 0012](docs/decisions/0012-overlays.md)).
   - Scenes don't implement transitions. The compositor owns them.
@@ -444,7 +450,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   1. theme background
   2. `main` (current scene, plus the incoming scene during a transition)
   3. overlay slots
-  4. interrupt, beneath which the layers below are covered with the theme background (`hide`, the default), dimmed (`dim`) or left visible (`show`) ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md))
+  4. interrupt, beneath which the scene and overlays fade out so the theme background covers them (`hide`, the default), are dimmed (`dim`) or are left visible (`show`) ([ADR 0008](docs/decisions/0008-interrupt-backdrop.md), [ADR 0014](docs/decisions/0014-theming.md))
   5. blackout
 - **Transitions.** Owned by the compositor. The first version has a crossfade, 800 ms unless changed in the show's settings (`settings.transitionMs`); more can come later. At most two scenes are visible at once. Scenes are keyed by instance, so an instance that stays on air is updated in place, never remounted.
 - **Prefetch.** When `timeline.next` appears, the viewer loads the plugin module, creates the element and awaits `prepare()` (image decode, fonts) before `startsAt`.
@@ -647,6 +653,8 @@ The asset store, the asset picker, the `cue.*` rules, both plugins, quick announ
 - Admin theme editor with live preview, and activation.
 
 **Done when:** switching the active theme live changes the background, fonts and colours of every built-in scene and overlay without a reload, and without a fallback-font flash.
+
+Font faces, the `theme.*` rules, font gating, the background layer, scene backgrounds, the cover, custom CSS, video uploads and the admin pages are specified in [ADR 0014](docs/decisions/0014-theming.md).
 
 ### M8 — Overlays
 

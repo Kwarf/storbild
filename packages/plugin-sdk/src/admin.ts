@@ -64,6 +64,15 @@ export interface AssetSource {
 export type AssetSourceRequest = CustomEvent<{ source?: AssetSource }>;
 export const ASSET_SOURCE_REQUEST = "sb-asset-source";
 
+/** A file's thumbnail, or its format in letters when it has no picture, like a font. */
+function thumb(source: AssetSource, asset: AssetMeta) {
+  if (asset.thumbnail || asset.mimeType.startsWith("image/")) {
+    return html`<img class="thumb" alt="" loading="lazy" src=${source.previewUrl(asset.id)} />`;
+  }
+  const format = asset.mimeType.split("/")[1] ?? "";
+  return html`<span class="thumb" aria-hidden="true">${format.toUpperCase()}</span>`;
+}
+
 /** Whether a MIME type matches `accept` patterns like `image/*`; no patterns match all. */
 export function accepts(accept: readonly string[] | undefined, mimeType: string): boolean {
   if (!accept || accept.length === 0) return true;
@@ -333,6 +342,7 @@ export class SbField extends LitElement {
         return html`<input
           id="input"
           type="text"
+          placeholder=${field.placeholder ?? nothing}
           .value=${typeof value === "string" ? value : ""}
           @input=${(e: Event) => this.#set(text(e) === "" ? this.#blank(field) : text(e))}
         />`;
@@ -340,6 +350,7 @@ export class SbField extends LitElement {
         return html`<textarea
           id="input"
           rows="8"
+          placeholder=${field.placeholder ?? nothing}
           .value=${typeof value === "string" ? value : ""}
           @input=${(e: Event) => this.#set(text(e) === "" ? this.#blank(field) : text(e))}
         ></textarea>`;
@@ -366,6 +377,7 @@ export class SbField extends LitElement {
         return html`<input
           id="input"
           type="number"
+          placeholder=${field.placeholder ?? nothing}
           step=${field.integer ? "1" : "any"}
           min=${field.minimum ?? nothing}
           max=${field.maximum ?? nothing}
@@ -381,7 +393,7 @@ export class SbField extends LitElement {
           id="input"
           type="text"
           class="num"
-          placeholder="seconds or m:ss"
+          placeholder=${field.placeholder ?? "seconds or m:ss"}
           .value=${this.draft ?? (typeof value === "number" ? formatDuration(value) : "")}
           @input=${(e: Event) => {
             this.draft = text(e);
@@ -571,12 +583,20 @@ export class SbAssetPicker extends LitElement {
       }
       .thumb {
         flex: none;
+        box-sizing: border-box;
         width: 56px;
         height: 40px;
         object-fit: contain;
         background: var(--sb-bg-sunken, #efece6);
         border: 1px solid var(--sb-line, #dedad2);
         border-radius: var(--sb-radius, 3px);
+      }
+      span.thumb {
+        display: grid;
+        place-items: center;
+        font-size: var(--sb-text-xs, 11px);
+        letter-spacing: 0.06em;
+        color: var(--sb-muted, #6b675f);
       }
       .what {
         display: grid;
@@ -701,7 +721,7 @@ export class SbAssetPicker extends LitElement {
     return html`<div class="current">
         ${
           current
-            ? html`<img class="thumb" alt="" src=${source.previewUrl(current.id)} />
+            ? html`${thumb(source, current)}
                 <span class="what">
                   <span class="name">${current.name}</span>
                   <span class="meta">${sizeText(current)}</span>
@@ -748,7 +768,7 @@ export class SbAssetPicker extends LitElement {
                       aria-pressed=${asset.id === this.value ? "true" : "false"}
                       @click=${() => this.#pick(asset.id)}
                     >
-                      <img class="thumb" alt="" loading="lazy" src=${source.previewUrl(asset.id)} />
+                      ${thumb(source, asset)}
                       <span class="what">
                         <span class="name">${asset.name}</span>
                         <span class="meta">${sizeText(asset)}</span>

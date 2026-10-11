@@ -1,6 +1,11 @@
-import type { Instance, Issue, ShowState } from "@storbild/core";
+import type { Instance, InstanceBackground, Issue, ShowState } from "@storbild/core";
 import "@storbild/plugin-sdk/admin";
-import { describeForm, initialValue, type ValueChangeEvent } from "@storbild/plugin-sdk/admin";
+import {
+  describeForm,
+  type Field,
+  initialValue,
+  type ValueChangeEvent,
+} from "@storbild/plugin-sdk/admin";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
@@ -29,7 +34,42 @@ interface Draft {
   type: string;
   name: string;
   config: unknown;
+  /** Absent: the type's default (DESIGN.md §4.6). */
+  background?: InstanceBackground;
 }
+
+/** An instance's own image background (ADR 0014). */
+const imageBackgroundField: Field = {
+  kind: "object",
+  label: "",
+  required: true,
+  nullable: false,
+  properties: [
+    {
+      key: "assetId",
+      field: {
+        kind: "asset",
+        accept: ["image/*"],
+        label: "Image",
+        required: true,
+        nullable: false,
+      },
+    },
+    {
+      key: "fit",
+      field: {
+        kind: "select",
+        label: "Fit",
+        options: [
+          { value: "cover", label: "Fill the screen" },
+          { value: "contain", label: "Show it whole" },
+        ],
+        required: true,
+        nullable: false,
+      },
+    },
+  ],
+};
 
 /** The selection of an uploaded file is this prefix plus its ID. */
 const ASSET = "asset:";
@@ -179,6 +219,11 @@ export class LibraryPage extends LitElement {
       .panel-head .type {
         color: var(--sb-muted);
         font-size: var(--sb-text-sm);
+      }
+      .background {
+        display: grid;
+        gap: 12px;
+        max-width: 360px;
       }
       .preview {
         width: 100%;
@@ -435,6 +480,7 @@ export class LibraryPage extends LitElement {
         />
       </label>
       ${this.#editor(state, draft, schema)}
+      ${info?.kind === "scene" ? this.#background(draft, info.background === "own") : nothing}
       ${
         info
           ? html`<div>
@@ -505,6 +551,56 @@ export class LibraryPage extends LitElement {
     </div>`;
   }
 
+  /** What the scene shows behind itself: the theme's background, nothing, or an image. */
+  #background(draft: Draft, own: boolean) {
+    const background = draft.background;
+    const mode = typeof background === "object" ? "image" : (background ?? "default");
+    const set = (next: InstanceBackground | undefined) => {
+      const { background: _, ...rest } = draft;
+      this.draft = next === undefined ? rest : { ...rest, background: next };
+    };
+    return html`<div class="background" data-section="background">
+      <label class="field">
+        Background
+        <select
+          name="background"
+          @change=${(e: Event) => {
+            const value = (e.target as HTMLSelectElement).value;
+            set(
+              value === "image"
+                ? { assetId: "", fit: "cover" }
+                : value === "theme" || value === "none"
+                  ? value
+                  : undefined,
+            );
+          }}
+        >
+          <option value="default" ?selected=${mode === "default"}>
+            ${own ? "Its own (the type's default)" : "The theme's (the default)"}
+          </option>
+          ${own ? html`<option value="theme" ?selected=${mode === "theme"}>The theme's</option>` : nothing}
+          ${own ? nothing : html`<option value="none" ?selected=${mode === "none"}>None (black)</option>`}
+          <option value="image" ?selected=${mode === "image"}>An image</option>
+        </select>
+      </label>
+      ${
+        typeof background === "object"
+          ? html`<sb-field
+              .field=${imageBackgroundField}
+              .value=${background}
+              .issues=${this.issues
+                .filter((issue) => issue.path[0] === "background")
+                .map((issue) => ({ ...issue, path: issue.path.slice(1) }))}
+              @change=${(e: ValueChangeEvent) => {
+                e.stopPropagation();
+                set(e.detail.value as InstanceBackground);
+              }}
+            ></sb-field>`
+          : nothing
+      }
+    </div>`;
+  }
+
   /** The plugin's custom editor when it has one that loads, else the generated form. */
   #editor(state: ShowState, draft: Draft, schema: Schemas[string]["types"][string] | undefined) {
     const entry = state.plugins[draft.plugin];
@@ -565,6 +661,9 @@ export class LibraryPage extends LitElement {
       type: instance.type,
       name: instance.name,
       config: structuredClone(instance.config),
+      ...(instance.background !== undefined && {
+        background: structuredClone(instance.background),
+      }),
     };
   }
 
@@ -572,7 +671,12 @@ export class LibraryPage extends LitElement {
     const draft = this.draft;
     if (!draft || draft.id === undefined) return draft !== undefined;
     const base = this.#base;
-    return !base || draft.name !== base.name || !sameValue(draft.config, base.config);
+    return (
+      !base ||
+      draft.name !== base.name ||
+      !sameValue(draft.config, base.config) ||
+      !sameValue(draft.background ?? null, base.background ?? null)
+    );
   }
 
   #select(id: string | undefined) {
@@ -626,6 +730,7 @@ export class LibraryPage extends LitElement {
           type: draft.type,
           name: draft.name.trim(),
           config: (draft.config ?? {}) as never,
+          ...(draft.background !== undefined && { background: draft.background }),
         },
       });
       if (id) {
@@ -642,7 +747,12 @@ export class LibraryPage extends LitElement {
     void this.#run(async () => {
       await send({
         type: "instance.update",
-        payload: { id, name: draft.name.trim(), config: (draft.config ?? {}) as never },
+        payload: {
+          id,
+          name: draft.name.trim(),
+          config: (draft.config ?? {}) as never,
+          background: draft.background ?? null,
+        },
       });
       // Pick up what the server stored (with defaults), now or when its patch arrives.
       this.draft = undefined;

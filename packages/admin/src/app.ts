@@ -14,6 +14,7 @@ import "./schedule-page.ts";
 import { type Section, sections } from "./sections.ts";
 import "./settings-page.ts";
 import "./strip.ts";
+import "./theme-page.ts";
 import { controls } from "./styles.ts";
 
 const timers: Timers = {
@@ -31,10 +32,10 @@ async function fetchApi(url: string) {
   return response;
 }
 
-type Theme = "system" | "light" | "dark";
+type ColorScheme = "system" | "light" | "dark";
 const themeKey = "storbild.theme";
 
-function storedTheme(): Theme {
+function storedTheme(): ColorScheme {
   try {
     const theme = localStorage.getItem(themeKey);
     return theme === "light" || theme === "dark" ? theme : "system";
@@ -103,11 +104,6 @@ export class Admin extends LitElement {
         background: var(--sb-bg);
         font-weight: var(--sb-weight-strong);
       }
-      nav a .later {
-        font-size: var(--sb-text-xs);
-        color: var(--sb-muted);
-        font-weight: var(--sb-weight);
-      }
       .foot {
         margin-top: auto;
         padding: 12px 20px 0;
@@ -145,22 +141,13 @@ export class Admin extends LitElement {
         min-height: 0;
         overflow: auto;
       }
-      .placeholder {
-        padding: 20px 24px;
-      }
-      .placeholder h1 {
-        font-size: var(--sb-text-xl);
-        font-weight: var(--sb-weight-strong);
-        margin: 0 0 8px;
-        letter-spacing: -0.01em;
-      }
     `,
   ];
 
   declare state: ShowState | undefined;
   declare connected: boolean;
   declare path: string;
-  declare theme: Theme;
+  declare theme: ColorScheme;
   /** The plugins' JSON Schemas for generated forms; reloaded on every (re)connect. */
   declare schemas: Schemas | undefined;
 
@@ -259,7 +246,6 @@ export class Admin extends LitElement {
                 @click=${(event: MouseEvent) => this.#navigate(event, section.path)}
               >
                 ${section.label}
-                ${"milestone" in section ? html`<span class="later">later</span>` : nothing}
               </a>
             </li>`,
           )}
@@ -301,15 +287,12 @@ export class Admin extends LitElement {
         return html`<sb-overlays-page .state=${state} .ctx=${ctx}></sb-overlays-page>`;
       case "/library":
         return html`<sb-library-page .state=${state} .ctx=${ctx} .schemas=${schemas}></sb-library-page>`;
+      case "/theme":
+        return html`<sb-theme-page .state=${state} .ctx=${ctx}></sb-theme-page>`;
       case "/plugins":
         return html`<sb-plugins-page .state=${state} .schemas=${schemas}></sb-plugins-page>`;
       case "/settings":
         return html`<sb-settings-page .state=${state}></sb-settings-page>`;
-      default:
-        return html`<div class="placeholder">
-          <h1>${current.label}</h1>
-          <p class="muted">This page arrives in ${"milestone" in current ? current.milestone : "a later milestone"}.</p>
-        </div>`;
     }
   }
 
@@ -323,7 +306,7 @@ export class Admin extends LitElement {
   }
 
   #setTheme = (event: Event) => {
-    const theme = (event.target as HTMLSelectElement).value as Theme;
+    const theme = (event.target as HTMLSelectElement).value as ColorScheme;
     this.theme = theme;
     if (theme === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = theme;

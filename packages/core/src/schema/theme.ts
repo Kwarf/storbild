@@ -4,10 +4,21 @@ import { fitSchema } from "./instance.ts";
 
 const dimSchema = z.number().min(0).max(1);
 
+/** One uploaded woff2 file of a font family, with the weight and style it provides. */
+export const fontFaceSchema = z.object({
+  assetId: idSchema,
+  weight: z.number().int().min(1).max(1000).default(400),
+  style: z.enum(["normal", "italic"]).default("normal"),
+});
+export type FontFaceRef = z.infer<typeof fontFaceSchema>;
+
+/**
+ * A font for one role. Without `faces`, `family` is a font stack the screen has locally, such
+ * as `sans-serif`; with them, it names the uploaded family (ADR 0014).
+ */
 export const fontRefSchema = z.object({
   family: z.string().min(1),
-  /** Uploaded woff2 files. */
-  assetIds: z.array(idSchema).optional(),
+  faces: z.array(fontFaceSchema).optional(),
 });
 export type FontRef = z.infer<typeof fontRefSchema>;
 

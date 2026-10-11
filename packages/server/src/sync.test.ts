@@ -335,3 +335,33 @@ describe("scheduler", () => {
     });
   });
 });
+
+describe("themes", () => {
+  test("creating and activating a theme arrive as patches on /events and survive a restart", async () => {
+    const client = await connect();
+    const before = await snapshotOf(client);
+    const { id } = await command("theme.create", {
+      name: "Party",
+      background: { type: "color", color: "#202040" },
+    });
+    const created = await patchOf(client);
+    expect(created.ops).toContainEqual(
+      expect.objectContaining({ op: "add", path: `/themes/${id}` }),
+    );
+    await command("theme.activate", { id });
+    const activated = await patchOf(client);
+    expect(activated.ops).toContainEqual({ op: "replace", path: "/activeThemeId", value: id });
+
+    const res = await fetch(new URL("/api/commands", storbild.admin.url), {
+      method: "POST",
+      headers: { ...auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "theme.delete", payload: { id } }),
+    });
+    expect(res.status).toBe(422);
+
+    await storbild.stop();
+    await boot();
+    expect(storbild.hub.state.activeThemeId).toBe(id as string);
+    expect(storbild.hub.state.themes[before.activeThemeId]?.name).toBe("Default");
+  });
+});

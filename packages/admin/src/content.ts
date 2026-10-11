@@ -92,7 +92,10 @@ export const DRAFT_ID = "draft";
  */
 export function previewState(
   state: ShowState,
-  instance: Pick<Instance, "plugin" | "type" | "name"> & { id?: string; config: unknown },
+  instance: Pick<Instance, "plugin" | "type" | "name" | "background"> & {
+    id?: string;
+    config: unknown;
+  },
 ): ShowState {
   const id = instance.id ?? DRAFT_ID;
   const stored = state.instances[id];
@@ -106,6 +109,8 @@ export function previewState(
     config: (instance.config ?? null) as JsonValue,
   };
   delete draft.error;
+  if (instance.background === undefined) delete draft.background;
+  else draft.background = instance.background;
   const overlay = state.plugins[instance.plugin]?.types[instance.type]?.kind === "overlay";
   const slot = state.overlays.find((p) => p.instanceId === id)?.slot ?? "bottom-right";
   return {

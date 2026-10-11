@@ -3,31 +3,32 @@ import {
   reservedSlots,
   resolveTimelineOnScreen,
   type ShowState,
+  sceneBackground,
+  type Theme,
   type Timeline,
 } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { css, html, LitElement, type PropertyDeclarations } from "lit";
+import { BackgroundLayer } from "./background-layer.ts";
+import { renderable } from "./modules.ts";
 import { OverlayLayer } from "./overlay-layer.ts";
 import { SceneLayer, TRANSITION_MS } from "./scene-layer.ts";
-
-/** The background colour until themes have more than a colour (M7). */
-function backgroundOf(state: ShowState | undefined): string {
-  const background = state?.themes[state.activeThemeId]?.background;
-  return background?.type === "color" ? background.color : "#000";
-}
-
-/** The theme's safe area and overlay gap when it doesn't set them, px (ADR 0012). */
-export const DEFAULT_SAFE_AREA = 96;
-export const DEFAULT_GAP = 24;
+import { fonts, themeVariables } from "./theme.ts";
 
 /** The longest the compositor waits before resolving the timeline again. */
 const MAX_WAIT_MS = 60_000;
 
 /**
  * Renders a show state on a 1920×1080 canvas (DESIGN.md §7). Layers, bottom to top: theme
- * background, main scene, overlay slots, interrupt, blackout. Beneath the interrupt, a dim or a
- * cover of the theme background hides what is below, as its `below` asks (ADR 0008). The admin
- * preview (M5) reuses it, fed from its own stream.
+ * background, main scene, overlay slots, interrupt, blackout. Beneath the interrupt, a dim
+ * hides what is below, or the scene and overlays fade out so the theme background covers them,
+ * as its `below` asks (ADR 0008, ADR 0014). The admin preview (M5) reuses it, fed from its own
+ * stream.
+ *
+ * The active theme (ADR 0014) sets the CSS variables on the host, the background and the
+ * custom CSS. It takes effect only once its fonts have loaded, so no fallback font is seen:
+ * until then the previous theme stays, and before the first one nothing is shown. A scene
+ * that draws its own background, or has one of its own, fades the theme background out.
  *
  * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
  * `timeline`, and is resolved again at the next boundary. So the screen switches at
@@ -56,14 +57,40 @@ export class Compositor extends LitElement {
       inset: 0;
     }
     .scene > * {
+      position: absolute;
+      inset: 0;
       width: 100%;
       height: 100%;
     }
-    .background {
+    .background,
+    .main,
+    .overlays {
+      transition: opacity var(--sb-compositor-transition) ease-in-out;
+    }
+    .background.off,
+    .main.off,
+    .overlays.off {
+      opacity: 0;
+    }
+    .backdrop,
+    .backdrop > *,
+    .backdrop-scene {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+    .backdrop {
       transition: background-color var(--sb-compositor-transition) ease-in-out;
     }
+    .backdrop > video {
+      object-fit: cover;
+    }
+    .backdrop-dim {
+      background: #000;
+      opacity: 0;
+    }
     .dim,
-    .cover,
     .blackout {
       background: #000;
       opacity: 0;
@@ -72,9 +99,6 @@ export class Compositor extends LitElement {
     }
     .dim.on {
       opacity: 0.75;
-    }
-    .cover.on {
-      opacity: 1;
     }
     .blackout.on {
       opacity: 1;
@@ -164,37 +188,55 @@ export class Compositor extends LitElement {
   declare state: ShowState | undefined;
   declare ctx: ViewerContext;
 
+  #background: BackgroundLayer | undefined;
   #main: SceneLayer | undefined;
   #interrupt: SceneLayer | undefined;
   #overlays: OverlayLayer | undefined;
   #timeline: Timeline | undefined;
   #timer: number | undefined;
+  /** The theme on screen, whose fonts have loaded. */
+  #theme: Theme | undefined;
+  #customCss: CSSStyleSheet | undefined;
+  #customCssText = "";
 
   protected override willUpdate() {
     const { state, ctx } = this;
-    // The fades of the background, dim, cover and blackout follow the show's setting.
+    // The fades of the layers, the dim and blackout follow the show's setting.
     const fadeMs = state?.settings?.transitionMs ?? TRANSITION_MS;
     this.style.setProperty("--sb-compositor-transition", `${fadeMs}ms`);
-    const theme = state?.themes[state.activeThemeId];
-    this.style.setProperty("--sb-safe-area", `${theme?.safeArea ?? DEFAULT_SAFE_AREA}px`);
-    this.style.setProperty("--sb-gap", `${theme?.gap ?? DEFAULT_GAP}px`);
+    const wanted = state?.themes[state.activeThemeId];
+    if (wanted && ctx) {
+      if (fonts.ready(wanted)) this.#theme = wanted;
+      else void fonts.ensure(wanted, ctx.assetUrl).then(() => this.requestUpdate());
+    }
+    if (this.#theme) {
+      for (const [name, value] of Object.entries(themeVariables(this.#theme))) {
+        this.style.setProperty(name, value);
+      }
+    }
     const now = ctx?.serverNow();
     this.#timeline = state && now !== undefined ? resolveTimelineOnScreen(state, now) : undefined;
     this.#arm(this.#timeline, now);
   }
 
   override render() {
+    const { state } = this;
     const timeline = this.#timeline;
     const below = timeline?.interrupt?.below;
+    // With `below: "hide"`, the scene and overlays fade out and the theme background shows
+    // again, even beneath a scene with its own background (ADR 0014).
+    const covered = below === "hide";
+    const main = timeline?.main?.instanceId;
+    const ownBackground =
+      state !== undefined &&
+      main !== undefined &&
+      renderable(state, main) !== undefined &&
+      sceneBackground(state, main) !== "theme";
     return html`
-      <div class="layer background" style="background-color: ${backgroundOf(this.state)}"></div>
-      <div class="layer main" part="main"></div>
-      <div class="layer overlays" part="overlays"></div>
+      <div class="layer background ${ownBackground && !covered ? "off" : ""}"></div>
+      <div class="layer main ${covered ? "off" : ""}" part="main"></div>
+      <div class="layer overlays ${covered ? "off" : ""}" part="overlays"></div>
       <div class="layer dim ${below === "dim" ? "on" : ""}"></div>
-      <div
-        class="layer cover ${below === "hide" ? "on" : ""}"
-        style="background-color: ${backgroundOf(this.state)}"
-      ></div>
       <div class="layer interrupt" part="interrupt"></div>
       <div class="layer blackout ${timeline?.blackout ? "on" : ""}" part="blackout"></div>
     `;
@@ -202,16 +244,41 @@ export class Compositor extends LitElement {
 
   protected override updated() {
     const root = this.renderRoot;
+    this.#background ??= new BackgroundLayer(root.querySelector(".background") as HTMLElement);
     this.#main ??= new SceneLayer(root.querySelector(".main") as HTMLElement);
     this.#interrupt ??= new SceneLayer(root.querySelector(".interrupt") as HTMLElement);
     this.#overlays ??= new OverlayLayer(root.querySelector(".overlays") as HTMLElement);
     const { state, ctx } = this;
     const timeline = this.#timeline;
-    if (!state || !ctx || !timeline) return;
+    const theme = this.#theme;
+    // Nothing is shown before the first theme's fonts are ready.
+    if (!state || !ctx || !timeline || !theme) return;
+    this.#applyCustomCss(theme.customCss ?? "");
     const { main, next, interrupt } = timeline;
+    this.#background.update(state, ctx, theme.background);
     this.#main.update(state, ctx, main?.instanceId, next?.instanceId);
     this.#interrupt.update(state, ctx, interrupt?.instanceId);
     this.#overlays.update(state, ctx, reservedSlots(state, timeline));
+  }
+
+  /**
+   * The theme's custom CSS, in this shadow root after the compositor's own styles. It reaches
+   * the layers, inherited properties and parts plugins expose, never the page around a preview.
+   */
+  #applyCustomCss(text: string) {
+    const root = this.renderRoot as ShadowRoot;
+    if (!this.#customCss) {
+      this.#customCss = new CSSStyleSheet();
+      root.adoptedStyleSheets = [...root.adoptedStyleSheets, this.#customCss];
+    }
+    if (this.#customCssText !== text) {
+      this.#customCssText = text;
+      try {
+        this.#customCss.replaceSync(text);
+      } catch (error) {
+        console.error("the theme's custom CSS is invalid", error);
+      }
+    }
   }
 
   /** Resolves again when the timeline next changes. */
@@ -231,11 +298,12 @@ export class Compositor extends LitElement {
     super.disconnectedCallback();
     window.clearTimeout(this.#timer);
     this.#timer = undefined;
+    this.#background?.dispose();
     this.#main?.dispose();
     this.#interrupt?.dispose();
     this.#overlays?.dispose();
     // Reconnecting creates new layers on the next update.
-    this.#main = this.#interrupt = this.#overlays = undefined;
+    this.#background = this.#main = this.#interrupt = this.#overlays = undefined;
   }
 
   override connectedCallback() {

@@ -78,9 +78,23 @@ describe("drafts", () => {
     ).toEqual({ at: at(11, 21, 30), action: { type: "take", instanceId: "i" } });
   });
 
+  test("a theme switch round-trips through its draft", () => {
+    const draft = {
+      ...emptyDraft(),
+      type: "activateTheme" as const,
+      at: "2026-10-11T22:00:00",
+      themeId: "t",
+    };
+    const result = cueOf(draft);
+    expect(result).toEqual({ at: at(11, 22), action: { type: "activateTheme", themeId: "t" } });
+    if (typeof result === "string") throw new Error(result);
+    expect(draftOf({ id: "x", ...result })).toEqual(draft);
+  });
+
   test.each([
     [{}, "Choose a date and time."],
     [{ at: "2026-10-11T21:30" }, "Choose a scene."],
+    [{ at: "2026-10-11T21:30", type: "activateTheme" as const }, "Choose a theme."],
     [{ at: "2026-10-11T21:30", instanceId: "i", duration: "soon" }, /duration/],
   ])("an incomplete draft says what to fix %#", (changes, message) => {
     expect(cueOf({ ...emptyDraft(), ...changes })).toMatch(message);

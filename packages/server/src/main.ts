@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { Config } from "@storbild/core";
-import { ConfigError, createInitialState, reconcilePlugins } from "@storbild/core";
+import { ConfigError, createInitialState, reconcilePlugins, withActiveTheme } from "@storbild/core";
 import { createAdminApp } from "./admin-app.ts";
 import { getAdminBundle } from "./admin-page.ts";
 import { AssetStore } from "./assets.ts";
@@ -59,6 +59,12 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   if (!initial) {
     initial = createInitialState({ now: now(), newId });
     saveState(db, initial);
+  } else {
+    const repaired = withActiveTheme(initial, newId);
+    if (repaired !== initial) {
+      initial = repaired;
+      saveState(db, initial, ["themes", "activeThemeId"]);
+    }
   }
   const { modules, catalog, registry } = await loadAllPlugins({
     builtinDir:
@@ -107,6 +113,8 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     hostname: config.host,
     port: config.admin.port,
     idleTimeout,
+    // Bun refuses larger bodies before the app sees them; uploads are streamed (ADR 0014).
+    maxRequestBodySize: Math.max(config.maxUploadBytes, config.maxVideoUploadBytes) + 1024 * 1024,
     fetch: createAdminApp({
       hub,
       now,
@@ -125,6 +133,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       ),
       assets,
       maxUploadBytes: config.maxUploadBytes,
+      maxVideoUploadBytes: config.maxVideoUploadBytes,
       ...(stream && { stream }),
     }).fetch,
   });

@@ -4,7 +4,7 @@ Date: 2026-10-11
 
 ## Status
 
-Accepted
+Accepted. The upload route's body and thumbnail are refined by ADR 0014.
 
 ## Context
 

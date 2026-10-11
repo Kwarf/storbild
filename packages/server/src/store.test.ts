@@ -64,7 +64,10 @@ function fullState(): ShowState {
         id: "theme2",
         name: "Party",
         background: { type: "image", assetId: "bg", fit: "contain", dim: 0.5 },
-        fonts: { heading: { family: "Display", assetIds: ["f1"] }, body: { family: "Body" } },
+        fonts: {
+          heading: { family: "Display", faces: [{ assetId: "f1", weight: 700, style: "normal" }] },
+          body: { family: "Body" },
+        },
         colors: { text: "#fff", muted: "#999", accent: "#f0f", surface: "#111" },
         safeArea: 48,
         customCss: "h1 { color: red }",
@@ -189,6 +192,42 @@ describe("persistence", () => {
         type: "interrupt",
         instanceId: "i1",
         below: "dim",
+      });
+    } finally {
+      rmSync(dir, { recursive: true });
+    }
+  });
+
+  test("a font's old assetIds migrate to regular faces", () => {
+    const dir = mkdtempSync(join(tmpdir(), "storbild-"));
+    try {
+      const path = join(dir, "storbild.db");
+      const db = openDatabase(path);
+      saveState(db, fullState());
+      db.run("UPDATE themes SET data = json_set(data, '$.fonts', json(?))", [
+        JSON.stringify({
+          heading: { family: "Display", assetIds: [font, logo] },
+          body: { family: "Body" },
+        }),
+      ]);
+      db.run("PRAGMA user_version = 5");
+      db.close();
+
+      const reopened = openDatabase(path);
+      const logged: string[] = [];
+      const loaded = loadState(reopened, (message) => logged.push(message));
+      reopened.close();
+      expect(logged).toEqual([]);
+      const theme = Object.values(loaded?.themes ?? {})[0];
+      expect(theme?.fonts).toEqual({
+        heading: {
+          family: "Display",
+          faces: [
+            { assetId: font, weight: 400, style: "normal" },
+            { assetId: logo, weight: 400, style: "normal" },
+          ],
+        },
+        body: { family: "Body" },
       });
     } finally {
       rmSync(dir, { recursive: true });

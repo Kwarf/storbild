@@ -86,6 +86,7 @@ export interface TestAdminAppOptions {
   /** A directory for an asset store; without it, the app has none. */
   assetsDir?: string;
   maxUploadBytes?: number;
+  maxVideoUploadBytes?: number;
 }
 
 /** An admin app on `createTestHub()`, with sessions in memory and time on a `FakeClock`. */
@@ -96,6 +97,7 @@ export function createTestAdminApp({
   schemas,
   assetsDir,
   maxUploadBytes,
+  maxVideoUploadBytes,
 }: TestAdminAppOptions = {}) {
   const hub = createTestHub();
   const assets = assetsDir ? new AssetStore({ dir: assetsDir, hub, now: clock.now }) : undefined;
@@ -115,6 +117,7 @@ export function createTestAdminApp({
     ...(schemas && { schemas }),
     ...(assets && { assets }),
     ...(maxUploadBytes !== undefined && { maxUploadBytes }),
+    ...(maxVideoUploadBytes !== undefined && { maxVideoUploadBytes }),
   });
   return { app, hub, sessions, clock, assets };
 }

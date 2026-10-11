@@ -161,14 +161,14 @@ describe.skipIf(!enabled)("admin", () => {
         .waitFor();
       await onScreen("interrupt", "Fire exit").waitFor();
       // By default the theme background covers the scene and overlays below.
-      await screen.locator("sb-compositor .cover.on").waitFor({ state: "attached" });
+      await screen.locator("sb-compositor .main.off").waitFor({ state: "attached" });
       expect(await screen.locator("sb-compositor .dim.on").count()).toBe(0);
       await shot(admin, "live-interrupt");
 
       await admin.getByRole("button", { name: "Dismiss" }).click();
       await admin.locator('sb-strip .mode[data-mode="rotation"]').waitFor();
       await screen.locator("sb-compositor .interrupt > .scene").waitFor({ state: "detached" });
-      await screen.locator("sb-compositor .cover.on").waitFor({ state: "detached" });
+      await screen.locator("sb-compositor .main.off").waitFor({ state: "detached" });
 
       // Dimming instead is a choice.
       await admin.getByLabel("Beneath the announcement").selectOption({ label: "Dim the screen" });
@@ -206,10 +206,10 @@ describe.skipIf(!enabled)("admin", () => {
   );
 
   test(
-    "pages not built yet say so; logging out returns to the form",
+    "pages have their own URLs; logging out returns to the form",
     async () => {
-      await admin.getByRole("link", { name: /Theme/ }).click();
-      await admin.getByText("This page arrives in M7.").waitFor();
+      await admin.getByRole("link", { name: "Theme" }).click();
+      await admin.getByRole("heading", { name: "Theme", level: 1 }).waitFor();
       expect(new URL(admin.url()).pathname).toBe("/theme");
       await admin.goBack();
       await admin.getByRole("heading", { name: "Live" }).waitFor();

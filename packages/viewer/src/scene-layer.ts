@@ -1,4 +1,4 @@
-import type { ShowState } from "@storbild/core";
+import { type ShowState, sceneBackground } from "@storbild/core";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import {
   assign,
@@ -229,7 +229,7 @@ export class SceneLayer {
         await withTimeout(
           (async () => {
             await element.updateComplete;
-            await element.prepare();
+            await Promise.all([element.prepare(), backgroundImage(wrapper)?.decode()]);
           })(),
           this.#prepareTimeoutMs,
           `preparing instance ${key}`,
@@ -256,7 +256,32 @@ export class SceneLayer {
   #assign(mounted: Mounted) {
     const scene = this.#state && renderable(this.#state, mounted.key);
     const ctx = this.#ctx;
-    if (scene && ctx) this.#safely("update", () => assign(mounted.element, scene, ctx));
+    if (scene && ctx) {
+      this.#safely("update", () => assign(mounted.element, scene, ctx));
+      this.#background(mounted, ctx);
+    }
+  }
+
+  /**
+   * An instance's own image background is drawn beneath its element, in its wrapper, so it
+   * crossfades with the scene (ADR 0014).
+   */
+  #background(mounted: Mounted, ctx: ViewerContext) {
+    const background = this.#state ? sceneBackground(this.#state, mounted.key) : "theme";
+    let img = backgroundImage(mounted.wrapper);
+    if (typeof background !== "object") {
+      img?.remove();
+      return;
+    }
+    if (!img) {
+      img = document.createElement("img");
+      img.className = "scene-background";
+      img.alt = "";
+      mounted.wrapper.prepend(img);
+    }
+    const src = ctx.assetUrl(background.assetId);
+    if (img.getAttribute("src") !== src) img.src = src;
+    img.style.objectFit = background.fit;
   }
 
   #unmount(mounted: Mounted) {
@@ -274,4 +299,11 @@ export class SceneLayer {
       this.#log(`scene ${what} failed`, error);
     }
   }
+}
+
+function backgroundImage(wrapper: HTMLElement): HTMLImageElement | undefined {
+  const first = wrapper.firstElementChild;
+  return first instanceof HTMLImageElement && first.className === "scene-background"
+    ? first
+    : undefined;
 }

@@ -249,7 +249,7 @@ export class SchedulePage extends LitElement {
         </span>
         <span class="actions">
           ${
-            cue.fired || action.type === "activateTheme"
+            cue.fired
               ? nothing
               : html`<button
                   aria-expanded=${editing ? "true" : "false"}
@@ -295,9 +295,26 @@ export class SchedulePage extends LitElement {
         <select aria-label="Action" @change=${(e: Event) => set({ type: value(e) as CueDraft["type"] })}>
           <option value="interrupt" ?selected=${draft.type === "interrupt"}>Interrupt</option>
           <option value="take" ?selected=${draft.type === "take"}>Take</option>
+          <option value="activateTheme" ?selected=${draft.type === "activateTheme"}>
+            Switch theme
+          </option>
         </select>
       </label>
-      <label>
+      ${
+        draft.type === "activateTheme"
+          ? html`<label>
+              Theme
+              <select class="theme" aria-label="Theme" @change=${(e: Event) => set({ themeId: value(e) })}>
+                <option value="" ?selected=${draft.themeId === ""}>Choose a theme…</option>
+                ${Object.values(state.themes)
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(
+                    (theme) =>
+                      html`<option value=${theme.id} ?selected=${draft.themeId === theme.id}>${theme.name}</option>`,
+                  )}
+              </select>
+            </label>`
+          : html`      <label>
         Scene
         <select class="scene" aria-label="Scene" @change=${(e: Event) => set({ instanceId: value(e) })}>
           <option value="" ?selected=${draft.instanceId === ""}>Choose a scene…</option>
@@ -335,6 +352,8 @@ export class SchedulePage extends LitElement {
               </select>
             </label>`
           : nothing
+      }
+`
       }
       <span class="actions">
         ${

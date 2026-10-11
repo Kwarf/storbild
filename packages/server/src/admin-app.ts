@@ -45,6 +45,8 @@ export interface AdminAppDeps {
   assets?: AssetStore;
   /** The largest upload, in bytes. */
   maxUploadBytes?: number;
+  /** The largest video upload, in bytes (ADR 0014). */
+  maxVideoUploadBytes?: number;
 }
 
 /**
@@ -71,6 +73,7 @@ export function createAdminApp({
   schemas = {},
   assets,
   maxUploadBytes = 25 * 1024 * 1024,
+  maxVideoUploadBytes = 200 * 1024 * 1024,
 }: AdminAppDeps) {
   const { sessions, limiter } = auth;
   const secure = new URL(auth.publicUrl).protocol === "https:";
@@ -102,14 +105,16 @@ export function createAdminApp({
     );
   };
 
+  const megabytes = (bytes: number) => Math.round(bytes / (1024 * 1024));
   const tooLarge = (c: Context) =>
     c.json(
       {
         error: "too_large" as const,
-        message: `Files can be at most ${Math.round(maxUploadBytes / (1024 * 1024))} MB.`,
+        message: `Files can be at most ${megabytes(maxUploadBytes)} MB, and videos ${megabytes(maxVideoUploadBytes)} MB.`,
       },
       413,
     );
+  const largestUpload = Math.max(maxUploadBytes, maxVideoUploadBytes);
 
   const app = new Hono<Env>();
   // Browsers send Origin on every state-changing request; a foreign one is a cross-site forgery.
@@ -197,31 +202,43 @@ export function createAdminApp({
         return c.json({ now: now() });
       })
       .get("/api/events", (c) => streamState(c, hub, stream))
-      // Multipart: `file`, and optionally `name` and a WebP `thumbnail` made by the admin.
-      .post(
-        "/api/assets",
+      // The file is the raw request body, named by `?name=`, and streamed to disk (ADR 0014).
+      .post("/api/assets", async (c) => {
+        if (!assets) return c.json({ error: "not_found" as const, message: "no asset store" }, 404);
+        const length = Number(c.req.header("Content-Length"));
+        if (length > largestUpload) return tooLarge(c);
+        const body = c.req.raw.body;
+        if (!body || length === 0) {
+          return c.json({ error: "invalid_upload" as const, message: "no file was sent" }, 400);
+        }
+        const result = await assets.upload(body, c.req.query("name") ?? "", {
+          file: maxUploadBytes,
+          video: maxVideoUploadBytes,
+        });
+        if (!result.ok && result.status === 413) return tooLarge(c);
+        if (!result.ok) return c.json({ error: result.error, message: result.message }, 415);
+        return c.json(result.asset, 200);
+      })
+      // A WebP thumbnail the admin made of an uploaded file.
+      .put(
+        "/api/assets/:id/thumbnail",
         bodyLimit({
-          maxSize: maxUploadBytes + MAX_THUMBNAIL_BYTES + 64 * 1024,
-          onError: tooLarge,
+          maxSize: MAX_THUMBNAIL_BYTES,
+          onError: (c) =>
+            c.json({ error: "too_large" as const, message: "The thumbnail is too large." }, 413),
         }),
         async (c) => {
-          if (!assets)
-            return c.json({ error: "not_found" as const, message: "no asset store" }, 404);
-          const form = await c.req.formData().catch(() => undefined);
-          const file = form?.get("file");
-          if (!(file instanceof Blob)) {
-            return c.json({ error: "invalid_upload" as const, message: "no file was sent" }, 400);
-          }
-          if (file.size > maxUploadBytes) return tooLarge(c);
-          const name = form?.get("name");
-          const thumbnail = form?.get("thumbnail");
-          const result = await assets.upload(
-            file,
-            typeof name === "string" ? name : file instanceof File ? file.name : "",
-            thumbnail instanceof Blob ? thumbnail : undefined,
+          const stored = await assets?.setThumbnail(
+            c.req.param("id"),
+            new Uint8Array(await c.req.arrayBuffer()),
           );
-          if (!result.ok) return c.json({ error: result.error, message: result.message }, 415);
-          return c.json(result.asset, 200);
+          if (!stored) {
+            return c.json(
+              { error: "invalid_thumbnail" as const, message: "not a thumbnail of a stored file" },
+              400,
+            );
+          }
+          return c.body(null, 204);
         },
       )
       .post(
