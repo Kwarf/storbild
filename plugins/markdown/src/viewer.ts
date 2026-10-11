@@ -37,6 +37,10 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
       line-height: 1.35;
       overflow-wrap: anywhere;
     }
+    /* A new block formatting context, so its height includes its children's margins. */
+    .body {
+      display: flow-root;
+    }
     h1,
     h2,
     h3,
@@ -63,7 +67,7 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
     table {
       margin: 0 0 0.6em;
     }
-    .content > :last-child {
+    .body > :last-child {
       margin-bottom: 0;
     }
     ul,
@@ -141,26 +145,33 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
     await this.#fit();
   }
 
-  /** Waits for the body's images, then steps `--scale` down until the content fits. */
+  /**
+   * Waits for the body's images, then steps `--scale` down until the body fits. It compares the
+   * body's layout height, not `scrollHeight`: Firefox counts glyphs that stick out of a tight
+   * line height (a lone heading) as overflow, which shrinks with the text and never goes away.
+   */
   async #fit() {
     const run = ++this.#fitting;
     const content = this.renderRoot.querySelector<HTMLElement>(".content");
-    if (!content) return;
+    const body = this.renderRoot.querySelector<HTMLElement>(".body");
+    if (!content || !body) return;
     await Promise.all(
-      [...content.querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)),
+      [...body.querySelectorAll("img")].map((img) => img.decode().catch(() => undefined)),
     );
     if (run !== this.#fitting) return;
     const full = this.settings.fontScale;
     let scale = full;
     content.style.setProperty("--scale", String(scale));
-    while (scale > full * MIN_FIT && content.scrollHeight > content.clientHeight + 1) {
+    while (scale > full * MIN_FIT && body.offsetHeight > content.clientHeight + 1) {
       scale *= FIT_STEP;
       content.style.setProperty("--scale", String(scale));
     }
   }
 
   override render() {
-    return html`<div class="content">${unsafeHTML(sanitize(this.config.content))}</div>`;
+    return html`<div class="content">
+      <div class="body">${unsafeHTML(sanitize(this.config.content))}</div>
+    </div>`;
   }
 }
 
