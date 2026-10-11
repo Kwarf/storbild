@@ -4,16 +4,17 @@ This file provides guidance to coding agents working with code in this repositor
 
 ## Project status
 
-Storbild is plugin-based big-screen ("beamer") software for demoparties. M0 (repository foundation) is in place; the packages are skeletons. [DESIGN.md](DESIGN.md) is the source of truth for architecture, scope and milestones (M0–M10). Read the relevant sections of DESIGN.md before starting any work, and keep scope to one milestone at a time.
+Storbild is plugin-based big-screen ("beamer") software for demoparties. M0–M5 are in place (foundation, core state and sync, plugin host, viewer, scheduler, admin foundation). [DESIGN.md](DESIGN.md) is the source of truth for architecture, scope and milestones (M0–M10). Read the relevant sections of DESIGN.md before starting any work, and keep scope to one milestone at a time.
 
 The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer) and 3001 (admin) are forwarded.
 
 ## Commands
 
 - `bun install`
-- `bun run dev` — starts both Hono apps (viewer :3000, admin :3001) with watch mode. Config comes from `STORBILD_*` env vars or `.env`; see `.env.example`
+- `bun run dev` — starts both Hono apps (viewer :3000, admin :3001) with watch mode. Config comes from `STORBILD_*` env vars or `.env`; see `.env.example`. `STORBILD_ADMIN_PASSWORD_HASH` is required
+- `bun run hash-password` — prints an argon2id hash for `STORBILD_ADMIN_PASSWORD_HASH`
 - `bun test` — single file: `bun test path/to/file.test.ts`; single test: `bun test -t "name pattern"`
-- `STORBILD_E2E=1 bun test packages/server/e2e` — viewer e2e tests in Chromium via Playwright (skipped without the env var). Install the browser once with `bunx playwright install chromium` in `packages/server`
+- `STORBILD_E2E=1 bun test packages/server/e2e` — viewer and admin e2e tests in Chromium via Playwright (skipped without the env var). Install the browser once with `bunx playwright install chromium` in `packages/server`. The admin test writes light/dark screenshots to `packages/server/e2e/screenshots/` for design review
 - `bun run typecheck` — `tsc --noEmit` in every workspace (each package has its own `tsconfig.json`)
 - `bun run lint` (Biome check), `bun run format` (Biome format). CI runs `bunx biome ci .`
 
@@ -25,12 +26,13 @@ Some rules below are enforced by tooling ([ADR 0002](docs/decisions/0002-configu
 
 Bun workspace monorepo (DESIGN.md §3): `packages/core` (pure shared logic), `packages/plugin-sdk` (public `@storbild/plugin-sdk`), `packages/server` (Bun + Hono), `packages/viewer` (Lit), `packages/admin` (Lit), and built-in plugins under `plugins/`.
 
-- **One process, two Hono apps on two ports.** Viewer app (:3000: viewer page, `/events` SSE, `/time`) and admin app (:3001: login, `/api/commands`, `/api/events`). Keep viewer routes and admin routes on their own apps so the screen hostname can never reach admin routes.
+- **One process, two Hono apps on two ports.** Viewer app (:3000: viewer page, `/events` SSE, `/time`) and admin app (:3001: login, `/api/commands`, `/api/events`). Keep viewer routes and admin routes on their own apps so the screen hostname can never reach admin routes. Everything under `/api/` needs a session cookie, and non-GET requests need a matching `Origin`; tests use `testConfig` and `adminHeaders` from `packages/server/src/testing.ts` ([ADR 0007](docs/decisions/0007-admin-foundation.md)).
 - **Server is the only writer.** Every change is a Zod-validated command (`POST /api/commands`), applied by a reducer, which bumps `revision`, persists to SQLite and broadcasts an RFC 6902 JSON Patch over SSE. Clients never mutate state directly.
 - **Viewers render from state, on the client.** SSE sends a snapshot and then patches. `Last-Event-ID` resumes from a ring buffer, and the server falls back to a snapshot when the buffer has rolled past.
 - **Time-based, not tick-based.** State carries absolute server-time start/end times. `resolveTimeline(state, t)` in `packages/core` is a pure function used by both the server (authoritative) and the viewer (to keep running through outages). Resolved durations are computed on the server and stored in state, so the viewer never needs plugin server code. The server's `Scheduler` arms one timer for the next boundary and calls `settle` in core (durations, re-anchoring, cues, timeline); take/interrupt/blackout are the `live` input ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 - **Viewer** (`packages/viewer`): `SyncClient` (SSE + watchdog), `ClockSync`, and `<sb-compositor>` with one `SceneLayer` per scene layer. The server bundles `@storbild/viewer/main` and serves it at `/app/<hash>/`, with lit/zod/SDK from the import map ([ADR 0005](docs/decisions/0005-viewer.md)). The compositor renders `resolveTimeline(state, serverNow())` itself and re-resolves at the next boundary.
 - **Plugins** (`definePlugin`) contribute instance types (`scene` or `overlay`), each with a Zod config schema. Each plugin has three faces: Lit viewer elements, admin forms generated via `z.toJSONSchema()` (or a custom editor), and an optional in-process server part. A plugin package's `exports["."]` is its definition (server only), and `package.json` `storbild.viewer` names its browser entry. The SDK has matching subpaths: `@storbild/plugin-sdk` (no DOM), `/viewer` (Lit) and `/build`. The host (`packages/server/src/plugins/`) bundles both faces with `Bun.build`, mapping `lit`, `zod` and the SDK to its own copies; in the browser they resolve through `/importmap.json`. Plugin modules are served at `/plugins/<id>/<version>/…` ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
+- **Admin** (`packages/admin`): a Lit shell (`<sb-admin>`) bundled and served like the viewer, at `/app/<hash>/` with fonts inside. It reuses the viewer's `SyncClient`, `ClockSync` and `<sb-compositor>` (for the preview) on `/api/events` and `/api/time`, and calls commands through `hc<AdminApp>`. Its root export (`src/server.ts`) holds server-side page HTML and tokens. Browser code may import the server only with `import type` ([ADR 0007](docs/decisions/0007-admin-foundation.md)).
 - **Compositor owns layers and transitions.** Layers from bottom to top: theme background, main scene, overlay slots, interrupt, blackout. Scenes are transparent by default and don't implement transitions.
 
 ## Rules that must not be broken

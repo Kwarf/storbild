@@ -2,9 +2,9 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { type JsonPatchOp, parseConfig, type ShowState } from "@storbild/core";
+import type { JsonPatchOp, ShowState } from "@storbild/core";
 import { type Storbild, start } from "./main.ts";
-import { SseClient } from "./testing.ts";
+import { adminHeaders, SseClient, testConfig } from "./testing.ts";
 
 const fixture = join(import.meta.dir, "../fixtures/external-plugin");
 const repoRoot = join(import.meta.dir, "../../..");
@@ -99,7 +99,7 @@ beforeAll(async () => {
   });
 
   storbild = await start(
-    parseConfig({
+    testConfig({
       STORBILD_VIEWER_PORT: "0",
       STORBILD_ADMIN_PORT: "0",
       STORBILD_DATA_DIR: join(root, "data"),
@@ -132,7 +132,7 @@ afterAll(async () => {
 async function command(type: string, payload: unknown) {
   const res = await fetch(new URL("/api/commands", storbild.admin.url), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...(await adminHeaders(storbild.admin.url)), "Content-Type": "application/json" },
     body: JSON.stringify({ type, payload }),
   });
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
@@ -313,9 +313,14 @@ describe("external plugin (M2 acceptance)", () => {
   });
 
   test("serves the plugin's routes on the admin app only", async () => {
-    const res = await fetch(new URL("/api/plugins/external/hello?x=1", storbild.admin.url));
+    const headers = await adminHeaders(storbild.admin.url);
+    const res = await fetch(new URL("/api/plugins/external/hello?x=1", storbild.admin.url), {
+      headers,
+    });
     expect(await res.json()).toEqual({ path: "/hello", greeting: "hej" });
-    expect((await fetch(new URL("/api/plugins/markdown/x", storbild.admin.url))).status).toBe(404);
+    expect(
+      (await fetch(new URL("/api/plugins/markdown/x", storbild.admin.url), { headers })).status,
+    ).toBe(404);
     expect((await fetch(new URL("/api/plugins/external/hello", storbild.viewer.url))).status).toBe(
       404,
     );
@@ -401,7 +406,7 @@ describe("modules", () => {
 describe("restart", () => {
   test("marks instances of a removed plugin as broken and keeps its data", async () => {
     const before = storbild.hub.state;
-    const config = parseConfig({
+    const config = testConfig({
       STORBILD_VIEWER_PORT: "0",
       STORBILD_ADMIN_PORT: "0",
       STORBILD_DATA_DIR: join(root, "data"),

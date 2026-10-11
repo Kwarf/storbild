@@ -2,7 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": []
+    // Bun types, because the typed API client imports the server's app type (ADR 0007).
+    "types": ["bun"]
   },
   "include": ["src"]
 }

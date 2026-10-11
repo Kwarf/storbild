@@ -13,6 +13,17 @@
     "packages/admin": {
       "name": "@storbild/admin",
       "version": "0.0.0",
+      "dependencies": {
+        "@fontsource/instrument-sans": "5.3.0",
+        "@storbild/core": "workspace:*",
+        "@storbild/plugin-sdk": "workspace:*",
+        "@storbild/viewer": "workspace:*",
+        "hono": "4.13.13",
+        "lit": "3.3.3",
+      },
+      "devDependencies": {
+        "@storbild/server": "workspace:*",
+      },
     },
     "packages/core": {
       "name": "@storbild/core",
@@ -39,8 +50,12 @@
     "packages/server": {
       "name": "@storbild/server",
       "version": "0.0.0",
+      "bin": {
+        "storbild": "./src/cli.ts",
+      },
       "dependencies": {
         "@hono/zod-validator": "0.9.1",
+        "@storbild/admin": "workspace:*",
         "@storbild/core": "workspace:*",
         "@storbild/plugin-sdk": "workspace:*",
         "@storbild/viewer": "workspace:*",
@@ -91,6 +106,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.5.15", "", { "os": "win32", "cpu": "arm64" }, "sha512-2kPKzhNlm8C+Ru3GcO0Me2ODkCBLrVOUNuyi84RJyWDVKAA4+Kjj3jMjL938lF6BRfvltC4vB2nPY9SvN51Ovg=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.15", "", { "os": "win32", "cpu": "x64" }, "sha512-yAzh4UqEImV6Hcy0zjUqNfJAsUhoD64FBQCdTG8Md/Z2wQeVP/ZmJ3XRYAs1g8J9fjTFyl2fCtc5FB5til47+g=="],
+
+    "@fontsource/instrument-sans": ["@fontsource/instrument-sans@5.3.0", "", {}, "sha512-QwXc4hb/px3XvSPS2CPAOgey8nyrQFxgxrmXQQ+pN+P51hKdAcchxpg8rSbjANFfPu6VKXhDqkVDucXMZ9CM5g=="],
 
     "@hono/zod-validator": ["@hono/zod-validator@0.9.1", "", { "peerDependencies": { "hono": ">=4.11.2", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-iiv6w0qrIc0arfvCtUqBWsvl4fXjzaTcQcCJTTtCnkawF9HHGE+KjEl0ox3gQJ6rKZEgE3mLExlQCF72M+mNuw=="],
 

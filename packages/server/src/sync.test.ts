@@ -2,25 +2,28 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { applyPatch, type JsonPatchOp, parseConfig, type ShowState } from "@storbild/core";
+import { applyPatch, type JsonPatchOp, type ShowState } from "@storbild/core";
 import { type StartOptions, type Storbild, start } from "./main.ts";
-import { FakeClock, SseClient } from "./testing.ts";
+import { adminHeaders, FakeClock, SseClient, testConfig } from "./testing.ts";
 
 const BUFFER_SIZE = 4;
 
 let dataDir: string;
 let storbild: Storbild;
+/** A logged-in admin session, for API calls. */
+let auth: Record<string, string>;
 const clients: SseClient[] = [];
 
 async function boot(options: StartOptions = {}) {
   storbild = await start(
-    parseConfig({
+    testConfig({
       STORBILD_VIEWER_PORT: "0",
       STORBILD_ADMIN_PORT: "0",
       STORBILD_DATA_DIR: dataDir,
     }),
     { bufferSize: BUFFER_SIZE, stream: { heartbeatMs: 100 }, ...options },
   );
+  auth = await adminHeaders(storbild.admin.url);
 }
 
 beforeEach(async () => {
@@ -43,7 +46,7 @@ async function connect(lastEventId?: string, path = "/events") {
 async function command(type: string, payload: unknown) {
   const res = await fetch(new URL("/api/commands", storbild.admin.url), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { ...auth, "Content-Type": "application/json" },
     body: JSON.stringify({ type, payload }),
   });
   expect(res.status).toBe(200);
@@ -204,7 +207,11 @@ describe("GET /events", () => {
 
 describe("GET /api/events", () => {
   test("follows the same protocol as /events", async () => {
-    const client = await SseClient.connect(new URL("/api/events", storbild.admin.url));
+    const client = await SseClient.connect(
+      new URL("/api/events", storbild.admin.url),
+      undefined,
+      auth,
+    );
     clients.push(client);
     const state = await snapshotOf(client);
     await createInstance("A");
@@ -285,13 +292,13 @@ describe("scheduler", () => {
   test("live commands reject unknown and unplayable instances", async () => {
     const res = await fetch(new URL("/api/commands", storbild.admin.url), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({ type: "live.take", payload: { instanceId: "nope" } }),
     });
     expect(res.status).toBe(404);
     const clear = await fetch(new URL("/api/commands", storbild.admin.url), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({ type: "live.clearInterrupt", payload: {} }),
     });
     expect(clear.status).toBe(422);

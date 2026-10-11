@@ -453,8 +453,9 @@ Sync client, bundling and failure handling are specified in [ADR 0005](docs/deci
 ### 8.1 Auth
 
 - **A single user.** The username and an argon2id password hash (`Bun.password`) come from config or the environment. A `storbild hash-password` CLI helper generates the hash.
-- **Session.** An HttpOnly, Secure, SameSite=Lax session cookie, **host-only** (no `Domain` attribute). Sessions are stored in SQLite.
+- **Session.** An HttpOnly, Secure, SameSite=Lax session cookie, **host-only** (no `Domain` attribute). Sessions are stored in SQLite. Secure is dropped only when the admin URL is plain http, in development.
 - **Login protection.** Login attempts are rate-limited.
+- Everything under `/api/` needs a session, and state-changing requests must carry a matching `Origin` ([ADR 0007](docs/decisions/0007-admin-foundation.md)).
 
 ### 8.2 Structure
 
@@ -589,6 +590,8 @@ Live control as a separate `live` input, the anchor item, rotation and edit rule
 - A typed API client (`hc`).
 
 **Done when:** an operator can log in, see what's on screen and what's next, and take or interrupt or blackout and resume. The visual design follows §8.3 (review with screenshots in both modes).
+
+Sessions, the cookie, rate limiting, the origin check, which routes are public, bundling, the font, the typed client and the Live panel's controls are specified in [ADR 0007](docs/decisions/0007-admin-foundation.md).
 
 ### M6 — Admin content management and assets
 

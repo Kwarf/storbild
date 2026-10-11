@@ -9,11 +9,9 @@ const envSchema = z
     STORBILD_ADMIN_PORT: port.default(3001),
     STORBILD_DATA_DIR: z.string().min(1).default("./data"),
     STORBILD_ADMIN_USERNAME: z.string().min(1).default("admin"),
-    // Optional until auth lands in M5.
     STORBILD_ADMIN_PASSWORD_HASH: z
-      .string()
-      .startsWith("$argon2id$", "must be an argon2id hash ($argon2id$...)")
-      .optional(),
+      .string({ error: "is required; generate one with `bun run hash-password`" })
+      .startsWith("$argon2id$", "must be an argon2id hash ($argon2id$...)"),
     STORBILD_PLUGIN_PATHS: z.string().default(""),
     STORBILD_VIEWER_URL: z.url().default("http://localhost:3000"),
     STORBILD_ADMIN_URL: z.url().default("http://localhost:3001"),
@@ -29,7 +27,7 @@ const envSchema = z
 export interface Config {
   host: string;
   viewer: { port: number; publicUrl: string };
-  admin: { port: number; publicUrl: string; username: string; passwordHash?: string };
+  admin: { port: number; publicUrl: string; username: string; passwordHash: string };
   dataDir: string;
   pluginPaths: string[];
 }
@@ -62,9 +60,7 @@ export function parseConfig(env: Record<string, string | undefined>, pathDelimit
       port: e.STORBILD_ADMIN_PORT,
       publicUrl: e.STORBILD_ADMIN_URL,
       username: e.STORBILD_ADMIN_USERNAME,
-      ...(e.STORBILD_ADMIN_PASSWORD_HASH !== undefined && {
-        passwordHash: e.STORBILD_ADMIN_PASSWORD_HASH,
-      }),
+      passwordHash: e.STORBILD_ADMIN_PASSWORD_HASH,
     },
     dataDir: e.STORBILD_DATA_DIR,
     pluginPaths: e.STORBILD_PLUGIN_PATHS.split(pathDelimiter)

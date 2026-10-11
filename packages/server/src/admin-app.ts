@@ -1,25 +1,151 @@
 import { zValidator } from "@hono/zod-validator";
+import { adminPage, loginPage, shellPaths } from "@storbild/admin";
 import { type Command, CommandError, commandRequestSchema } from "@storbild/core";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { AdminBundle } from "./admin-page.ts";
+import { createBundleRoutes } from "./app-bundle.ts";
+import {
+  clientOf,
+  type LoginLimiter,
+  originAllowed,
+  type SessionStore,
+  safeEqual,
+} from "./auth.ts";
 import { createModuleRoutes, type ModuleRegistry } from "./plugins/routes.ts";
 import { type StreamOptions, streamState } from "./sse.ts";
 import { RevisionConflictError, type StateHub } from "./state-hub.ts";
 
+export interface AdminAuth {
+  username: string;
+  passwordHash: string;
+  /** The admin's public URL. Its origin is trusted, and https makes the cookie Secure. */
+  publicUrl: string;
+  sessions: SessionStore;
+  limiter: LoginLimiter;
+}
+
 export interface AdminAppDeps {
   hub: StateHub;
+  now: () => number;
+  auth: AdminAuth;
   stream?: StreamOptions;
   /** Plugin modules, also served here for the admin's preview and custom editors. */
   modules?: ModuleRegistry;
+  /** The admin page's bundle. Without it, the shell paths are a 404. */
+  bundle?: AdminBundle;
   /** Handles plugin routes under `/api/plugins/<id>/`. */
   plugins?: { handle(id: string, request: Request): Promise<Response | undefined> };
 }
 
-/** The operator-facing app (login, /api/commands, /api/events). Unauthenticated until M5. */
-export function createAdminApp({ hub, stream, modules, plugins }: AdminAppDeps) {
-  const app = new Hono();
+/**
+ * Bun passes its server as the second argument to `fetch`, which tells the client address.
+ * It is absent in `app.request()` tests.
+ */
+interface Env {
+  Bindings: { requestIP?(request: Request): { address: string } | null };
+}
+
+/**
+ * The operator-facing app: login, the admin shell, `/api/commands`, `/api/events`. Everything
+ * under `/api/` needs a session (DESIGN.md §8.1, ADR 0007). Bundles, fonts and plugin modules
+ * are public, as they are on the viewer app.
+ */
+export function createAdminApp({ hub, now, auth, stream, modules, bundle, plugins }: AdminAppDeps) {
+  const { sessions, limiter } = auth;
+  const secure = new URL(auth.publicUrl).protocol === "https:";
+  const publicOrigin = new URL(auth.publicUrl).origin;
+  // `__Host-` makes the browser enforce Secure, Path=/ and no Domain: a host-only cookie.
+  const cookie = secure ? "__Host-storbild_session" : "storbild_session";
+  const fontBase = bundle ? `/app/${bundle.hash}/fonts/` : "/fonts/";
+
+  /** Whether the request has a live session; renews the cookie when the session was extended. */
+  const hasSession = (c: Context) => {
+    const token = getCookie(c, cookie);
+    const session = sessions.verify(token);
+    if (session?.refreshed && token) setSessionCookie(c, token);
+    return session !== undefined;
+  };
+  const setSessionCookie = (c: Context, token: string) =>
+    setCookie(c, cookie, token, {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/",
+      maxAge: Math.floor(sessions.ttlMs / 1000),
+    });
+  const login = (c: Context, status: 200 | 401 | 429, username?: string, error?: string) => {
+    c.header("Cache-Control", "no-store");
+    return c.html(
+      loginPage({ fontBase, ...(username && { username }), ...(error && { error }) }),
+      status,
+    );
+  };
+
+  const app = new Hono<Env>();
+  // Browsers send Origin on every state-changing request; a foreign one is a cross-site forgery.
+  app.use(async (c, next) => {
+    if (!originAllowed(c.req.raw, publicOrigin)) return c.json({ error: "forbidden_origin" }, 403);
+    await next();
+  });
+  app.use("/api/*", async (c, next) => {
+    if (!hasSession(c)) return c.json({ error: "unauthorized" }, 401);
+    await next();
+  });
   if (modules) app.route("/", createModuleRoutes(modules));
+  if (bundle) {
+    app.route("/", createBundleRoutes(bundle));
+    const html = adminPage({
+      script: `/app/${bundle.hash}/admin.js`,
+      importMap: modules?.importMap ?? { imports: {} },
+      fontBase,
+    });
+    for (const path of shellPaths) {
+      app.get(path, (c) => {
+        if (!hasSession(c)) return c.redirect("/login");
+        c.header("Cache-Control", "no-store");
+        return c.html(html);
+      });
+    }
+  }
+
   return app
-    .get("/", (c) => c.text("Storbild admin"))
+    .get("/login", (c) => (hasSession(c) ? c.redirect("/") : login(c, 200)))
+    .post("/login", async (c) => {
+      const client = clientOf(
+        c.req.raw,
+        (c.env as Env["Bindings"] | undefined)?.requestIP?.(c.req.raw)?.address,
+      );
+      const wait = limiter.retryAfter(client);
+      if (wait > 0) {
+        const minutes = Math.ceil(wait / 60_000);
+        c.header("Retry-After", String(Math.ceil(wait / 1000)));
+        return login(
+          c,
+          429,
+          undefined,
+          `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`,
+        );
+      }
+      const form = await c.req.parseBody();
+      const username = typeof form.username === "string" ? form.username : "";
+      const password = typeof form.password === "string" ? form.password : "";
+      // Both checks always run, so the response time doesn't reveal a valid username.
+      const userOk = safeEqual(username, auth.username);
+      const passwordOk = await Bun.password.verify(password, auth.passwordHash).catch(() => false);
+      if (!userOk || !passwordOk) {
+        limiter.fail(client);
+        return login(c, 401, username, "Wrong username or password.");
+      }
+      limiter.succeed(client);
+      setSessionCookie(c, sessions.create());
+      return c.redirect("/", 303);
+    })
+    .post("/logout", (c) => {
+      sessions.delete(getCookie(c, cookie));
+      deleteCookie(c, cookie, { path: "/", secure });
+      return c.redirect("/login", 303);
+    })
     .all("/api/plugins/:id/*", async (c) => {
       const id = c.req.param("id");
       // The plugin sees paths relative to its prefix.
@@ -27,6 +153,10 @@ export function createAdminApp({ hub, stream, modules, plugins }: AdminAppDeps) 
       url.pathname = url.pathname.slice(`/api/plugins/${id}`.length) || "/";
       const response = await plugins?.handle(id, new Request(url.href, c.req.raw));
       return response ?? c.json({ error: "not_found" }, 404);
+    })
+    .get("/api/time", (c) => {
+      c.header("Cache-Control", "no-store");
+      return c.json({ now: now() });
     })
     .get("/api/events", (c) => streamState(c, hub, stream))
     .post(
@@ -59,3 +189,6 @@ export function createAdminApp({ hub, stream, modules, plugins }: AdminAppDeps) 
       },
     );
 }
+
+/** The admin app's type, for the admin's typed `hc` client. */
+export type AdminApp = ReturnType<typeof createAdminApp>;

@@ -42,6 +42,13 @@ const migrations: string[] = [
   `
   ALTER TABLE plugins ADD COLUMN info TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(info));
   `,
+  // Admin sessions (ADR 0007). `id` is the SHA-256 of the cookie's token.
+  `
+  CREATE TABLE sessions (
+    id TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+  ) STRICT;
+  `,
 ];
 
 /** Opens (creating if needed) and migrates the database. `path` may be ":memory:". */

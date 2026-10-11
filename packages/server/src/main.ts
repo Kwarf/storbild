@@ -2,6 +2,8 @@ import { join } from "node:path";
 import type { Config } from "@storbild/core";
 import { ConfigError, createInitialState, reconcilePlugins } from "@storbild/core";
 import { createAdminApp } from "./admin-app.ts";
+import { getAdminBundle } from "./admin-page.ts";
+import { LoginLimiter, SessionStore } from "./auth.ts";
 import { loadConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
 import {
@@ -17,6 +19,8 @@ import { StateHub } from "./state-hub.ts";
 import { loadState, saveState } from "./store.ts";
 import { createViewerApp } from "./viewer-app.ts";
 import { getViewerBundle } from "./viewer-page.ts";
+
+export type { AdminApp } from "./admin-app.ts";
 
 export interface Storbild {
   viewer: Bun.Server<undefined>;
@@ -76,7 +80,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   hub.update((state) => reconcilePlugins(state, catalog));
   const scheduler = new Scheduler(hub, { now, ...(options.timers && { timers: options.timers }) });
   scheduler.start();
-  const viewerBundle = await getViewerBundle();
+  const [viewerBundle, adminBundle] = await Promise.all([getViewerBundle(), getAdminBundle()]);
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
 
@@ -99,7 +103,21 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     hostname: config.host,
     port: config.admin.port,
     idleTimeout,
-    fetch: createAdminApp({ hub, modules: registry, plugins, ...(stream && { stream }) }).fetch,
+    fetch: createAdminApp({
+      hub,
+      now,
+      auth: {
+        username: config.admin.username,
+        passwordHash: config.admin.passwordHash,
+        publicUrl: config.admin.publicUrl,
+        sessions: new SessionStore(db, { now }),
+        limiter: new LoginLimiter({ now }),
+      },
+      modules: registry,
+      bundle: adminBundle,
+      plugins,
+      ...(stream && { stream }),
+    }).fetch,
   });
   return {
     viewer,

@@ -3,9 +3,12 @@ import { ConfigError, parseConfig } from "./config.ts";
 
 const HASH = "$argon2id$v=19$m=65536,t=2,p=1$c2FsdA$aGFzaA";
 
+/** The minimal valid environment. */
+const base = { STORBILD_ADMIN_PASSWORD_HASH: HASH };
+
 function issuesOf(env: Record<string, string>): string[] {
   try {
-    parseConfig(env);
+    parseConfig({ ...base, ...env });
   } catch (error) {
     if (error instanceof ConfigError) return error.issues;
     throw error;
@@ -14,11 +17,16 @@ function issuesOf(env: Record<string, string>): string[] {
 }
 
 describe("parseConfig", () => {
-  test("applies defaults to an empty environment", () => {
-    expect(parseConfig({})).toEqual({
+  test("applies defaults to every other variable", () => {
+    expect(parseConfig(base)).toEqual({
       host: "127.0.0.1",
       viewer: { port: 3000, publicUrl: "http://localhost:3000" },
-      admin: { port: 3001, publicUrl: "http://localhost:3001", username: "admin" },
+      admin: {
+        port: 3001,
+        publicUrl: "http://localhost:3001",
+        username: "admin",
+        passwordHash: HASH,
+      },
       dataDir: "./data",
       pluginPaths: [],
     });
@@ -51,15 +59,14 @@ describe("parseConfig", () => {
   });
 
   test("ignores unrelated variables and treats empty values as unset", () => {
-    const config = parseConfig({ PATH: "/usr/bin", STORBILD_VIEWER_PORT: "" });
+    const config = parseConfig({ ...base, PATH: "/usr/bin", STORBILD_VIEWER_PORT: "" });
     expect(config.viewer.port).toBe(3000);
   });
 
   test("splits plugin paths on the given delimiter and drops empty entries", () => {
-    expect(parseConfig({ STORBILD_PLUGIN_PATHS: "C:\\a;; C:\\b ;" }, ";").pluginPaths).toEqual([
-      "C:\\a",
-      "C:\\b",
-    ]);
+    expect(
+      parseConfig({ ...base, STORBILD_PLUGIN_PATHS: "C:\\a;; C:\\b ;" }, ";").pluginPaths,
+    ).toEqual(["C:\\a", "C:\\b"]);
   });
 
   test("rejects out-of-range and non-numeric ports", () => {
@@ -74,8 +81,14 @@ describe("parseConfig", () => {
   });
 
   test("allows ephemeral port 0 for both apps", () => {
-    const config = parseConfig({ STORBILD_VIEWER_PORT: "0", STORBILD_ADMIN_PORT: "0" });
+    const config = parseConfig({ ...base, STORBILD_VIEWER_PORT: "0", STORBILD_ADMIN_PORT: "0" });
     expect([config.viewer.port, config.admin.port]).toEqual([0, 0]);
+  });
+
+  test("requires a password hash", () => {
+    expect(issuesOf({ STORBILD_ADMIN_PASSWORD_HASH: "" })).toEqual([
+      "STORBILD_ADMIN_PASSWORD_HASH: is required; generate one with `bun run hash-password`",
+    ]);
   });
 
   test("rejects a password hash that is not argon2id", () => {

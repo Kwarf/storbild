@@ -4,9 +4,10 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseConfig, type ShowState } from "@storbild/core";
+import type { ShowState } from "@storbild/core";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
+import { adminHeaders, testConfig } from "../src/testing.ts";
 
 const enabled = process.env.STORBILD_E2E === "1";
 const TIMEOUT = 30_000;
@@ -22,10 +23,11 @@ describe.skipIf(!enabled)("viewer", () => {
   let ports: { viewer: string; admin: string } = { viewer: "0", admin: "0" };
   let browser: Browser;
   let screens: Screen[] = [];
+  let auth: Record<string, string>;
 
   async function boot() {
     storbild = await start(
-      parseConfig({
+      testConfig({
         STORBILD_VIEWER_PORT: ports.viewer,
         STORBILD_ADMIN_PORT: ports.admin,
         STORBILD_DATA_DIR: dataDir,
@@ -34,12 +36,13 @@ describe.skipIf(!enabled)("viewer", () => {
       { stream: { heartbeatMs: 1_000 } },
     );
     ports = { viewer: String(storbild.viewer.port), admin: String(storbild.admin.port) };
+    auth = await adminHeaders(storbild.admin.url);
   }
 
   async function command(type: string, payload: unknown): Promise<string | undefined> {
     const res = await fetch(new URL("/api/commands", storbild.admin.url), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...auth, "Content-Type": "application/json" },
       body: JSON.stringify({ type, payload }),
     });
     const body = (await res.json()) as { id?: string };

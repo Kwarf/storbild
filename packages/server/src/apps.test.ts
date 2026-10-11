@@ -2,14 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseConfig } from "@storbild/core";
-import { createAdminApp } from "./admin-app.ts";
+import { getAdminBundle } from "./admin-page.ts";
 import { type Storbild, start } from "./main.ts";
-import { createTestHub } from "./testing.ts";
+import {
+  adminHeaders,
+  createTestAdminApp,
+  createTestHub,
+  TEST_PASSWORD,
+  testConfig,
+} from "./testing.ts";
 import { createViewerApp } from "./viewer-app.ts";
 import { getViewerBundle } from "./viewer-page.ts";
 
-const viewer = await getViewerBundle();
+const [viewer, adminBundle] = await Promise.all([getViewerBundle(), getAdminBundle()]);
 
 describe("viewer app", () => {
   const importMap = { imports: { lit: "/vendor/abc/lit/index.js" } };
@@ -55,7 +60,7 @@ describe("viewer app", () => {
     expect(await res.json()).toEqual({ now: 1234 });
   });
 
-  test.each(["/api/commands", "/api/events", "/login"])(
+  test.each(["/api/commands", "/api/events", "/api/time", "/login", "/logout", "/live"])(
     "does not expose admin route %s",
     async (path) => {
       expect((await app.request(path)).status).toBe(404);
@@ -65,12 +70,20 @@ describe("viewer app", () => {
 });
 
 describe("admin app", () => {
-  const hub = createTestHub();
-  const app = createAdminApp({ hub });
+  const { app, hub } = createTestAdminApp({ bundle: adminBundle });
+  let cookie: string;
+  beforeAll(async () => {
+    const res = await app.request("/login", {
+      method: "POST",
+      headers: { Origin: "http://localhost" },
+      body: new URLSearchParams({ username: "admin", password: TEST_PASSWORD }),
+    });
+    cookie = res.headers.get("Set-Cookie")?.split(";")[0] as string;
+  });
   const post = (body: unknown) =>
     app.request("/api/commands", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { Cookie: cookie, Origin: "http://localhost", "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
   const create = {
@@ -78,8 +91,44 @@ describe("admin app", () => {
     payload: { plugin: "markdown", type: "text", name: "Rules", config: { content: "#" } },
   };
 
-  test("serves the admin root", async () => {
-    expect((await app.request("/")).status).toBe(200);
+  test.each(["/", "/live", "/rotation", "/settings"])(
+    "serves the shell at %s, uncached, with the import map and bundle",
+    async (path) => {
+      const res = await app.request(path, { headers: { Cookie: cookie } });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Cache-Control")).toBe("no-store");
+      const html = await res.text();
+      expect(html).toContain('<script type="importmap">');
+      expect(html).toContain(`<script type="module" src="/app/${adminBundle.hash}/admin.js">`);
+      expect(html).toContain(
+        `/app/${adminBundle.hash}/fonts/instrument-sans-latin-400-normal.woff2`,
+      );
+      expect(html).toContain("<sb-admin></sb-admin>");
+    },
+  );
+
+  test("sends the shell to the login page without a session", async () => {
+    const res = await app.request("/live");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("/login");
+  });
+
+  test("serves the bundle and fonts publicly and immutably, with lit left to the import map", async () => {
+    const js = await app.request(`/app/${adminBundle.hash}/admin.js`);
+    expect(js.status).toBe(200);
+    expect(js.headers.get("Cache-Control")).toContain("immutable");
+    expect(await js.text()).toMatch(/from\s*"lit"/);
+    const font = await app.request(
+      `/app/${adminBundle.hash}/fonts/instrument-sans-latin-600-normal.woff2`,
+    );
+    expect(font.status).toBe(200);
+    expect(font.headers.get("Content-Type")).toBe("font/woff2");
+  });
+
+  test("serves the server time", async () => {
+    const res = await app.request("/api/time", { headers: { Cookie: cookie } });
+    expect(res.headers.get("Cache-Control")).toBe("no-store");
+    expect(await res.json()).toEqual({ now: 1_000_000 });
   });
 
   test("applies a command and returns the revision and new ID", async () => {
@@ -123,7 +172,7 @@ describe("start", () => {
   let storbild: Storbild;
   beforeAll(async () => {
     storbild = await start(
-      parseConfig({
+      testConfig({
         STORBILD_VIEWER_PORT: "0",
         STORBILD_ADMIN_PORT: "0",
         STORBILD_DATA_DIR: dataDir,
@@ -138,6 +187,11 @@ describe("start", () => {
   test("serves both apps on separate ports", async () => {
     expect(storbild.viewer.port).not.toBe(storbild.admin.port);
     expect(await (await fetch(storbild.viewer.url)).text()).toContain("<sb-viewer>");
-    expect(await (await fetch(storbild.admin.url)).text()).toBe("Storbild admin");
+    const login = await fetch(storbild.admin.url);
+    expect(login.url).toEndWith("/login");
+    const page = await fetch(storbild.admin.url, {
+      headers: await adminHeaders(storbild.admin.url),
+    });
+    expect(await page.text()).toContain("<sb-admin>");
   });
 });

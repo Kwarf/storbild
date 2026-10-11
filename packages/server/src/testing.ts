@@ -1,14 +1,44 @@
 import {
+  type Config,
   createInitialState,
   type PluginCatalog,
+  parseConfig,
   reconcilePlugins,
   type ShowState,
 } from "@storbild/core";
 import { z } from "zod";
+import { type AdminAppDeps, createAdminApp } from "./admin-app.ts";
+import { LoginLimiter, SessionStore } from "./auth.ts";
 import { openDatabase } from "./db.ts";
 import type { SchedulerTimers } from "./scheduler.ts";
 import { StateHub } from "./state-hub.ts";
 import { saveState } from "./store.ts";
+
+/** The admin password in tests. Its hash is cheap to compute and verify. */
+export const TEST_PASSWORD = "correct horse";
+export const testPasswordHash = await Bun.password.hash(TEST_PASSWORD, {
+  algorithm: "argon2id",
+  memoryCost: 1024,
+  timeCost: 1,
+});
+
+/** Config from `env`, with the test password. */
+export function testConfig(env: Record<string, string>): Config {
+  return parseConfig({ STORBILD_ADMIN_PASSWORD_HASH: testPasswordHash, ...env });
+}
+
+/** Logs in to a running admin app and returns the headers an API call needs. */
+export async function adminHeaders(adminUrl: URL): Promise<Record<string, string>> {
+  const res = await fetch(new URL("/login", adminUrl), {
+    method: "POST",
+    headers: { Origin: adminUrl.origin },
+    body: new URLSearchParams({ username: "admin", password: TEST_PASSWORD }),
+    redirect: "manual",
+  });
+  const cookie = res.headers.get("Set-Cookie")?.split(";")[0];
+  if (res.status !== 303 || !cookie) throw new Error(`login failed: ${res.status}`);
+  return { Cookie: cookie, Origin: adminUrl.origin };
+}
 
 /** A catalog with one plugin, shaped like the built-in `markdown`. */
 export const testCatalog: PluginCatalog = {
@@ -44,6 +74,36 @@ export function createTestHub(bufferSize?: number): StateHub {
     catalog: testCatalog,
     ...(bufferSize !== undefined && { bufferSize }),
   });
+}
+
+export interface TestAdminAppOptions {
+  /** The admin's public URL; https makes the session cookie Secure. */
+  publicUrl?: string;
+  clock?: FakeClock;
+  bundle?: AdminAppDeps["bundle"];
+}
+
+/** An admin app on `createTestHub()`, with sessions in memory and time on a `FakeClock`. */
+export function createTestAdminApp({
+  publicUrl = "http://localhost",
+  clock = new FakeClock(1_000_000),
+  bundle,
+}: TestAdminAppOptions = {}) {
+  const hub = createTestHub();
+  const sessions = new SessionStore(openDatabase(":memory:"), { now: clock.now });
+  const app = createAdminApp({
+    hub,
+    now: clock.now,
+    auth: {
+      username: "admin",
+      passwordHash: testPasswordHash,
+      publicUrl,
+      sessions,
+      limiter: new LoginLimiter({ now: clock.now }),
+    },
+    ...(bundle && { bundle }),
+  });
+  return { app, hub, sessions, clock };
 }
 
 /** A clock and timers that only move when told to, for the scheduler. */
@@ -104,11 +164,15 @@ export class SseClient {
   readonly #decoder = new TextDecoder();
   #buffer = "";
 
-  static async connect(url: string | URL, lastEventId?: string): Promise<SseClient> {
+  static async connect(
+    url: string | URL,
+    lastEventId?: string,
+    headers: Record<string, string> = {},
+  ): Promise<SseClient> {
     const client = new SseClient();
     const res = await fetch(url, {
       signal: client.#abort.signal,
-      headers: lastEventId === undefined ? {} : { "Last-Event-ID": lastEventId },
+      headers: lastEventId === undefined ? headers : { ...headers, "Last-Event-ID": lastEventId },
     });
     if (!res.ok || !res.body) throw new Error(`stream failed: ${res.status}`);
     client.headers = res.headers;

@@ -4,9 +4,21 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/server.ts",
+    "./main": "./src/main.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@fontsource/instrument-sans": "5.3.0",
+    "@storbild/core": "workspace:*",
+    "@storbild/plugin-sdk": "workspace:*",
+    "@storbild/viewer": "workspace:*",
+    "hono": "4.13.13",
+    "lit": "3.3.3"
+  },
+  "devDependencies": {
+    "@storbild/server": "workspace:*"
   }
 }

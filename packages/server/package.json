@@ -3,6 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "storbild": "./src/cli.ts"
+  },
   "exports": {
     ".": "./src/main.ts"
   },
@@ -11,6 +14,7 @@
   },
   "dependencies": {
     "@hono/zod-validator": "0.9.1",
+    "@storbild/admin": "workspace:*",
     "@storbild/core": "workspace:*",
     "@storbild/plugin-sdk": "workspace:*",
     "@storbild/viewer": "workspace:*",

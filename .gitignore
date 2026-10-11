@@ -6,3 +6,4 @@ data/
 coverage/
 dist/
 *.tsbuildinfo
+packages/server/e2e/screenshots/
