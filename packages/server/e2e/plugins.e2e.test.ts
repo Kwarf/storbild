@@ -187,6 +187,37 @@ describe.skipIf(!enabled)("built-in plugins", () => {
   );
 
   test(
+    "markdown follows its horizontal and vertical alignment",
+    async () => {
+      await go("Library");
+      await newInstance("Scenes", "Markdown text", "Corner");
+      await editor().getByLabel("Content").fill("# Corner");
+      await editor().getByLabel("Alignment", { exact: true }).selectOption("right");
+      await editor().getByLabel("Vertical alignment").selectOption("top");
+      await create("Corner");
+
+      await take("Corner");
+      const heading = onAir("sb-markdown-scene h1").filter({ hasText: "Corner" });
+      await heading.waitFor();
+      const box = await heading.evaluate((h1) => {
+        const range = document.createRange();
+        range.selectNodeContents(h1);
+        const text = range.getBoundingClientRect();
+        const host = (h1.getRootNode() as ShadowRoot).host.getBoundingClientRect();
+        return { right: host.right - text.right, top: text.top - host.top, width: host.width };
+      });
+      // Against the right edge and the top, inside the safe area.
+      expect(box.right).toBeLessThan(box.width * 0.1);
+      expect(box.top).toBeLessThan(box.width * 0.1);
+
+      // The theme test below restyles the program.
+      await take("Program");
+      await onAir("sb-markdown-scene h2").filter({ hasText: "Tonight" }).waitFor();
+    },
+    TIMEOUT,
+  );
+
+  test(
     "a Wi-Fi widget is made in its custom editor, whose QR code follows the form",
     async () => {
       await go("Library");

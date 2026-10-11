@@ -102,7 +102,11 @@ describe.skipIf(!enabled)("content pages", () => {
       await shot(admin, "library-new");
       await editor().getByRole("button", { name: "Create" }).click();
       await until(() => named("Welcome") !== undefined);
-      expect(named("Welcome")?.config).toEqual({ content: "# Welcome to the party\n\nHave fun" });
+      expect(named("Welcome")?.config).toEqual({
+        content: "# Welcome to the party\n\nHave fun",
+        align: "left",
+        verticalAlign: "center",
+      });
 
       await newMarkdown("Rules", "# Rules\n\nBe nice");
       await newMarkdown("Bar", "# Bar\n\nOpen all night");

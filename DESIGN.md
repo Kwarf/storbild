@@ -433,7 +433,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 
 | Plugin | Types | Notes |
 |---|---|---|
-| `markdown` | scene `text` | Markdown body, headings included (`marked`, sanitized with DOMPurify); theme typography; shrinks to fit. Polished in M9; the separate title was dropped in [ADR 0017](docs/decisions/0017-markdown-without-title.md) |
+| `markdown` | scene `text` | Markdown body, headings included (`marked`, sanitized with DOMPurify); theme typography; horizontal and vertical alignment per instance; shrinks to fit. Polished in M9; the separate title was dropped in [ADR 0017](docs/decisions/0017-markdown-without-title.md) |
 | `slideshow` | scene `images` | Multiple images; duration = count × per-image time; `background: "own"`. Built in M6b |
 | `countdown` | scene `countdown`, overlay `widget` | Target time; renders `target − serverNow()`; the overlay hides a while after the target. Built in M9 |
 | `announcement` | scene `announcement` | Big-text message on an opaque panel; intended for interrupts and takes. Built in M6b |

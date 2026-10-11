@@ -30,6 +30,25 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
       color: var(--sb-color-text, #fff);
       font-family: var(--sb-font-body, sans-serif);
     }
+    :host([vertical-align="top"]) {
+      justify-content: flex-start;
+    }
+    :host([vertical-align="bottom"]) {
+      justify-content: flex-end;
+    }
+    :host([align="center"]) .content {
+      text-align: center;
+    }
+    :host([align="right"]) .content {
+      text-align: right;
+    }
+    /* Tables are blocks, so text-align doesn't move them. */
+    :host([align="center"]) table {
+      margin-inline: auto;
+    }
+    :host([align="right"]) table {
+      margin-left: auto;
+    }
     .content {
       max-height: 100%;
       overflow: hidden;
@@ -137,6 +156,8 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
   #fitting = 0;
 
   protected override updated(changes: PropertyValues<this>) {
+    this.setAttribute("align", this.config.align);
+    this.setAttribute("vertical-align", this.config.verticalAlign);
     if (changes.has("config") || changes.has("settings")) void this.#fit();
   }
 
