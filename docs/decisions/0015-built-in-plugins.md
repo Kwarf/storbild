@@ -74,6 +74,19 @@ or cue is usually later the same day, so the operator only changes the hour and 
 `initialValue(field, { now })` in the SDK takes the time. Without it, as in a list's new
 item, the field stays unset. Existing instances and cues keep their stored times.
 
+**Offsets from now.** Every date-time field in a plugin form has an "In…" button, for things
+like a fast compo whose deadline is announced as "in 45 minutes".
+
+- It swaps the date for an offset, typed as minutes (`45`) or `h:mm` (`1:30`).
+- "Convert" swaps back with the date set to now plus the offset, rounded to the minute, so the
+  field shows exactly what is stored. Enter converts and Escape cancels.
+- "Now" is the time of the conversion, not of the save or of the scene going on air, so the
+  stored target stays absolute. The scene and widget agree on it, and reruns don't restart it.
+- The field gets the server time from the admin through a bubbling `sb-clock` event
+  (`CLOCK_REQUEST`), as asset fields get their files. Outside the admin it falls back to the
+  browser's clock, which is close enough for an offset.
+- The Schedule page keeps its plain time field, because cues are usually at round times.
+
 **Wi-Fi.** The `info` plugin gains a `wifi` overlay.
 
 - **Config.** `{ ssid, password?, security: "WPA" | "WEP" | "none", hidden, showPassword,

@@ -1,7 +1,14 @@
 import { expect, describe as group, test } from "bun:test";
 import { z } from "zod";
 import { fields } from "./fields.ts";
-import { describeForm, type Field, humanize, initialValue, type JsonSchema } from "./form-model.ts";
+import {
+  describeForm,
+  type Field,
+  humanize,
+  initialValue,
+  type JsonSchema,
+  parseOffset,
+} from "./form-model.ts";
 
 const formOf = (schema: z.ZodType) =>
   describeForm(z.toJSONSchema(schema, { io: "input" }) as JsonSchema);
@@ -199,4 +206,15 @@ test("initialValue fills required fields and defaults, and leaves optional ones 
     items: [],
     shown: false,
   });
+});
+
+test("parseOffset reads minutes or h:mm", () => {
+  expect(parseOffset("45")).toBe(45 * 60_000);
+  expect(parseOffset(" 1:30 ")).toBe(90 * 60_000);
+  expect(parseOffset("0:05")).toBe(5 * 60_000);
+  expect(parseOffset("90")).toBe(90 * 60_000);
+  expect(parseOffset("")).toBeUndefined();
+  for (const bad of ["0", "0:00", "1:75", "1:5", "-5", "1h", "1.5"]) {
+    expect([bad, parseOffset(bad)]).toEqual([bad, null]);
+  }
 });

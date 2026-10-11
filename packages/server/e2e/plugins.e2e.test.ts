@@ -257,6 +257,23 @@ describe.skipIf(!enabled)("built-in plugins", () => {
       const minute = (at: number) => toLocalInput(Math.floor(at / 60_000) * 60_000);
       const prefilled = await editor().getByLabel("Counts down to").inputValue();
       expect([minute(Date.now()), minute(Date.now() - 60_000)]).toContain(prefilled);
+      // "In…" takes an offset from now and converts it back to a date.
+      const field = editor().locator('sb-field[data-key="target"]');
+      await field.getByRole("button", { name: "In…" }).click();
+      const offset = field.getByLabel("Counts down to from now");
+      await offset.fill("1:7");
+      await offset.press("Enter");
+      await field.getByRole("alert").filter({ hasText: "h:mm" }).waitFor();
+      await offset.fill("45");
+      await shot(admin, "library-countdown-offset");
+      const asked = Date.now();
+      await field.getByRole("button", { name: "Convert" }).click();
+      const converted = await field.getByLabel("Counts down to").inputValue();
+      const near = (at: number) => toLocalInput(Math.round(at / 60_000) * 60_000);
+      expect([near(asked + 45 * 60_000 - 1_000), near(asked + 45 * 60_000 + 1_000)]).toContain(
+        converted,
+      );
+      await field.getByRole("button", { name: "In…" }).waitFor();
       // Whole minutes, an hour and a bit ahead, so the screen shows 1:0M:SS.
       const target = Math.ceil(Date.now() / 60_000) * 60_000 + 3_600_000;
       await editor().getByLabel("Counts down to").fill(toLocalInput(target));

@@ -1,7 +1,10 @@
 import { API_VERSION, definePlugin, fields, z } from "@storbild/plugin-sdk";
 
 const target = () =>
-  fields.datetime().meta({ title: "Counts down to", description: "Date and time." });
+  fields.datetime().meta({
+    title: "Counts down to",
+    description: "Date and time, or use In… for a time from now.",
+  });
 const doneText = () =>
   z.string().optional().meta({
     title: "When it's time",

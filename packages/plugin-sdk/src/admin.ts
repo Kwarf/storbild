@@ -10,7 +10,13 @@ import {
   type PropertyDeclarations,
   type PropertyValues,
 } from "lit";
-import { describeForm, type Field, initialValue, type JsonSchema } from "./form-model.ts";
+import {
+  describeForm,
+  type Field,
+  initialValue,
+  type JsonSchema,
+  parseOffset,
+} from "./form-model.ts";
 
 export type { AssetMeta, Issue } from "@storbild/core";
 export {
@@ -64,6 +70,13 @@ export interface AssetSource {
  */
 export type AssetSourceRequest = CustomEvent<{ source?: AssetSource }>;
 export const ASSET_SOURCE_REQUEST = "sb-asset-source";
+
+/**
+ * Fired (bubbling, composed) by a date-time field to turn an offset like "45 minutes from now"
+ * into a time. The admin sets `detail.now` to its server clock.
+ */
+export type ClockRequest = CustomEvent<{ now?: () => number }>;
+export const CLOCK_REQUEST = "sb-clock";
 
 /** A file's thumbnail, or its format in letters when it has no picture, like a font. */
 function thumb(source: AssetSource, asset: AssetMeta) {
@@ -249,6 +262,7 @@ export class SbField extends LitElement {
     issues: { attribute: false },
     draft: { state: true },
     draftError: { state: true },
+    offset: { state: true },
   };
 
   static override styles = fieldStyles;
@@ -260,6 +274,8 @@ export class SbField extends LitElement {
   /** Text being typed into a duration or JSON field, until it parses. */
   declare draft: string | undefined;
   declare draftError: string | undefined;
+  /** The offset from now being typed into a date-time field; `undefined` shows the date. */
+  declare offset: string | undefined;
   /** The value last parsed from the draft; the parent passing it back keeps the draft. */
   #emitted: unknown;
 
@@ -275,6 +291,7 @@ export class SbField extends LitElement {
       this.draft = undefined;
       this.draftError = undefined;
     }
+    if (changes.has("field")) this.offset = undefined;
   }
 
   /** Reports a value parsed from the draft, without replacing the draft. */
@@ -333,6 +350,64 @@ export class SbField extends LitElement {
   #set(value: unknown) {
     this.value = value;
     changed(this, value);
+  }
+
+  /** Swaps a date-time field to its offset input, or back with `undefined`, and focuses it. */
+  async #toOffset(offset: string | undefined) {
+    this.offset = offset;
+    this.draftError = undefined;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLInputElement>("#input")?.focus();
+  }
+
+  /** The server time from the admin; the browser's is close enough without one. */
+  #now(): number {
+    const request: ClockRequest = new CustomEvent(CLOCK_REQUEST, {
+      bubbles: true,
+      composed: true,
+      detail: {},
+    });
+    this.dispatchEvent(request);
+    return request.detail.now?.() ?? Date.now();
+  }
+
+  /** "In h:mm": converted to now plus the offset, to the minute, back in the date input. */
+  #offsetControl(field: Field) {
+    const convert = () => {
+      const ms = parseOffset(this.offset ?? "");
+      if (ms === null || ms === undefined) {
+        this.draftError = "Enter minutes, or hours and minutes as h:mm.";
+        return;
+      }
+      this.#set(Math.round((this.#now() + ms) / 60_000) * 60_000);
+      void this.#toOffset(undefined);
+    };
+    return html`<span class="inline">
+      <input
+        id="input"
+        type="text"
+        class="num"
+        inputmode="numeric"
+        placeholder="h:mm or minutes"
+        aria-label="${field.label} from now"
+        .value=${this.offset ?? ""}
+        @input=${(e: Event) => {
+          this.offset = (e.target as HTMLInputElement).value;
+          this.draftError = undefined;
+        }}
+        @keydown=${(e: KeyboardEvent) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            convert();
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            void this.#toOffset(undefined);
+          }
+        }}
+      />
+      <button type="button" @click=${convert}>Convert</button>
+      <button type="button" @click=${() => this.#toOffset(undefined)}>Cancel</button>
+    </span>`;
   }
 
   #control(field: Field) {
@@ -404,18 +479,24 @@ export class SbField extends LitElement {
           }}
         />`;
       case "datetime":
-        return html`<input
-          id="input"
-          type="datetime-local"
-          class="num"
-          .value=${toLocalInput(value)}
-          @change=${(e: Event) => {
-            const input = text(e);
-            this.#set(
-              input === "" ? (field.nullable ? null : undefined) : new Date(input).getTime(),
-            );
-          }}
-        />`;
+        if (this.offset !== undefined) return this.#offsetControl(field);
+        return html`<span class="inline">
+          <input
+            id="input"
+            type="datetime-local"
+            class="num"
+            .value=${toLocalInput(value)}
+            @change=${(e: Event) => {
+              const input = text(e);
+              this.#set(
+                input === "" ? (field.nullable ? null : undefined) : new Date(input).getTime(),
+              );
+            }}
+          />
+          <button type="button" title="Set it as a time from now" @click=${() => this.#toOffset("")}>
+            In…
+          </button>
+        </span>`;
       case "select": {
         const index = field.options.findIndex((option) => Object.is(option.value, value));
         return html`<select

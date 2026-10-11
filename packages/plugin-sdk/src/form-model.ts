@@ -255,3 +255,17 @@ export function initialValue(field: Field, options: InitialOptions = {}): unknow
       return field.nullable ? null : undefined;
   }
 }
+
+/**
+ * An offset from now typed into a date-time field: minutes (`45`) or hours and minutes
+ * (`1:30`), in ms. `undefined` when blank, `null` when it doesn't parse or isn't positive.
+ */
+export function parseOffset(text: string): number | undefined | null {
+  const value = text.trim();
+  if (value === "") return undefined;
+  const match = /^(?:(\d+):([0-5]\d)|(\d+))$/.exec(value);
+  if (!match) return null;
+  const [, hours, minutes, only] = match;
+  const total = only !== undefined ? Number(only) : Number(hours) * 60 + Number(minutes);
+  return total > 0 ? total * 60_000 : null;
+}

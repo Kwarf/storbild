@@ -1,5 +1,10 @@
 import type { ShowState } from "@storbild/core";
-import { ASSET_SOURCE_REQUEST, type AssetSourceRequest } from "@storbild/plugin-sdk/admin";
+import {
+  ASSET_SOURCE_REQUEST,
+  type AssetSourceRequest,
+  CLOCK_REQUEST,
+  type ClockRequest,
+} from "@storbild/plugin-sdk/admin";
 import type { ViewerContext } from "@storbild/plugin-sdk/viewer";
 import { ClockSync, hasStaleModules, SyncClient, type Timers } from "@storbild/viewer";
 import { css, html, LitElement, nothing, type PropertyDeclarations } from "lit";
@@ -213,6 +218,9 @@ export class Admin extends LitElement {
     if (this.path !== location.pathname) history.replaceState(null, "", this.path);
     this.addEventListener(ASSET_SOURCE_REQUEST, (event) => {
       (event as AssetSourceRequest).detail.source = this.assets;
+    });
+    this.addEventListener(CLOCK_REQUEST, (event) => {
+      (event as ClockRequest).detail.now = this.clock.serverNow;
     });
   }
 
