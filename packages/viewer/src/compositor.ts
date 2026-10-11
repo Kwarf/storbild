@@ -1,7 +1,7 @@
 import {
   nextBoundary,
   reservedSlots,
-  resolveTimeline,
+  resolveTimelineOnScreen,
   type ShowState,
   type Timeline,
 } from "@storbild/core";
@@ -32,7 +32,8 @@ const MAX_WAIT_MS = 60_000;
  * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
  * `timeline`, and is resolved again at the next boundary. So the screen switches at
  * `next.startsAt` even when the patch is late, and keeps the rotation going without one
- * (ADR 0006).
+ * (ADR 0006). A clock that trails the server's a little doesn't see a gap before a fresh
+ * anchor (ADR 0013).
  */
 export class Compositor extends LitElement {
   static override properties: PropertyDeclarations = {
@@ -178,7 +179,7 @@ export class Compositor extends LitElement {
     this.style.setProperty("--sb-safe-area", `${theme?.safeArea ?? DEFAULT_SAFE_AREA}px`);
     this.style.setProperty("--sb-gap", `${theme?.gap ?? DEFAULT_GAP}px`);
     const now = ctx?.serverNow();
-    this.#timeline = state && now !== undefined ? resolveTimeline(state, now) : undefined;
+    this.#timeline = state && now !== undefined ? resolveTimelineOnScreen(state, now) : undefined;
     this.#arm(this.#timeline, now);
   }
 

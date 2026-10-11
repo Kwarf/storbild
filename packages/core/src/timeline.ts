@@ -197,6 +197,24 @@ export function resolveTimeline(state: ShowState, t: number): Timeline {
   };
 }
 
+/** How far a screen's clock may trail the server's before a fresh anchor shows a gap. */
+export const ANCHOR_LAG_MS = 1_000;
+
+/**
+ * `resolveTimeline` for a screen, whose clock may trail the server's (ADR 0013). A command that
+ * re-anchors the rotation at the server's now leaves such a screen just before the anchor, where
+ * nothing is on air, so the scene on air would start to fade out. Within `ANCHOR_LAG_MS` of the
+ * anchor, with no live control on air, it resolves at the anchor instead.
+ */
+export function resolveTimelineOnScreen(state: ShowState, t: number): Timeline {
+  const timeline = resolveTimeline(state, t);
+  const { anchorAt } = state.playlist;
+  if (timeline.main || timeline.mode !== "auto" || t >= anchorAt || anchorAt - t > ANCHOR_LAG_MS) {
+    return timeline;
+  }
+  return resolveTimeline(state, anchorAt);
+}
+
 /**
  * When the resolved timeline changes next: the next item's start, or the end of the main
  * scene or interrupt. The server and the viewer arm their timers for it.

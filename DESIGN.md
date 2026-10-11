@@ -452,7 +452,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
   - A watchdog reloads the page if there's no message or heartbeat for 60 s, but only if the server answers `/time`. Otherwise it reopens the stream and keeps waiting, so a kiosk is never left on an error page.
   - A failing scene never stops the show. If `prepare()` fails, the scene is shown anyway; if its module can't load, only the layers below show.
-  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. On `visibilitychange` it re-resolves at once. M10 adds offline caching.
+  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. A screen clock that trails just behind a fresh anchor resolves at the anchor ([ADR 0013](docs/decisions/0013-screen-clock-lag-at-the-anchor.md)). On `visibilitychange` it re-resolves at once. M10 adds offline caching.
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
 - **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.

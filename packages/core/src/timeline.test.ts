@@ -6,10 +6,12 @@ import type { PlaylistItem } from "./schema/playlist.ts";
 import { createInitialState, type ShowState } from "./schema/state.ts";
 import { testCatalog } from "./test/catalog.ts";
 import {
+  ANCHOR_LAG_MS,
   inWindow,
   isPlayableScene,
   nextBoundary,
   resolveTimeline,
+  resolveTimelineOnScreen,
   rotationAt,
 } from "./timeline.ts";
 
@@ -352,5 +354,32 @@ describe("nextBoundary", () => {
     expect(nextBoundary(setup().resolve(15))).toBeUndefined();
     s.at(15).run({ type: "live.take", payload: { instanceId: s.scene("X") } });
     expect(nextBoundary(s.resolve(15))).toBeUndefined();
+  });
+});
+
+describe("resolveTimelineOnScreen", () => {
+  test("a screen just behind a fresh anchor sees the anchor item, not a gap", () => {
+    const s = setup(abc(), 1_000);
+    s.state = { ...s.state, playlist: { ...s.state.playlist, anchorItemId: "B" } };
+    expect(s.resolve(995).main).toBeUndefined();
+    expect(resolveTimelineOnScreen(s.state, 995)).toEqual(s.resolve(1_000));
+    expect(resolveTimelineOnScreen(s.state, 1_000 - ANCHOR_LAG_MS)).toEqual(s.resolve(1_000));
+  });
+
+  test("further before the anchor, and from it on, it resolves as the server does", () => {
+    const s = setup(abc(), 5_000);
+    for (const t of [5_000 - ANCHOR_LAG_MS - 1, 5_000, 5_015]) {
+      expect(resolveTimelineOnScreen(s.state, t)).toEqual(s.resolve(t));
+    }
+  });
+
+  test("leaves live control alone, even when the anchor is where it ends", () => {
+    const s = setup(abc());
+    s.at(15).run({
+      type: "live.interrupt",
+      payload: { instanceId: s.scene("Y"), durationMs: 500 },
+    });
+    expect(s.state.playlist.anchorAt).toBe(515);
+    expect(resolveTimelineOnScreen(s.state, 514)).toEqual(s.resolve(514));
   });
 });
