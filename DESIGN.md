@@ -287,7 +287,7 @@ The commands, fonts, the background layer, scene backgrounds, the interrupt cove
 
 Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
 
-**Show files.** The whole show can be exported as one zip (`show.json` plus the assets and their thumbnails) and imported into another install, replacing its show in one revision. Runtime data (live control, the timeline, plugin and instance state, the rotation's anchor) isn't exported ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
+**Show files.** The whole show can be exported as one zip (`show.json` plus the assets and their thumbnails) and imported into another install, replacing its show in one revision. Runtime data (live control, the timeline, plugin and instance state, the rotation's anchor) isn't exported ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)). The zip is written and read with zip.js ([ADR 0020](docs/decisions/0020-zip-js-for-show-files.md)).
 
 ### 4.8 Full state
 

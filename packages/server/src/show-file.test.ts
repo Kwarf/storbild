@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ShowState } from "@storbild/core";
 import { createTestAdminApp, TEST_PASSWORD } from "./testing.ts";
-import { writeZip, type ZipInput, ZipReader, type ZipSource } from "./zip.ts";
+import { writeZip, ZipReader, type ZipSource } from "./zip.ts";
 
 /** A real 1×1 PNG. */
 const png = Uint8Array.fromBase64(
@@ -73,8 +73,7 @@ function install(name: string) {
   };
 }
 
-/** Bun's `Blob` type lacks `slice` without the DOM lib, though every Blob has it. */
-const archive = (bytes: Uint8Array) => new Blob([bytes]) as unknown as ZipInput;
+const archive = (bytes: Uint8Array) => new Blob([bytes]);
 
 const zip = async (sources: ZipSource[]) =>
   new Uint8Array(await new Response(writeZip(sources)).arrayBuffer());

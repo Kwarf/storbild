@@ -18,6 +18,7 @@
     "@storbild/core": "workspace:*",
     "@storbild/plugin-sdk": "workspace:*",
     "@storbild/viewer": "workspace:*",
+    "@zip.js/zip.js": "2.18.2",
     "hono": "4.13.13",
     "zod": "4.6.5"
   },

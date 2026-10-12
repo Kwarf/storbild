@@ -142,7 +142,8 @@ A show file is one zip:
   plugin and instance state, the rotation's anchor and resolved durations.
 - **Newer files.** A file of a newer version is refused with a message saying so.
 
-**The zip code is our own** (`packages/server/src/zip.ts`), with no dependency.
+**The zip code is our own** (`packages/server/src/zip.ts`), with no dependency. ADR 0020
+replaces it with zip.js; the reader's checks stay.
 
 - **Writer.** It streams stored entries. It reads each file once for its CRC before writing it,
   so the sizes and CRC are in the local header and no data descriptors are needed, which every

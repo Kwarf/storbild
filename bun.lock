@@ -59,6 +59,7 @@
         "@storbild/core": "workspace:*",
         "@storbild/plugin-sdk": "workspace:*",
         "@storbild/viewer": "workspace:*",
+        "@zip.js/zip.js": "2.18.2",
         "hono": "4.13.13",
         "zod": "4.6.5",
       },
@@ -101,7 +102,7 @@
     },
     "plugins/info": {
       "name": "@storbild/plugin-info",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "uqr": "0.1.3",
       },
@@ -116,7 +117,7 @@
     },
     "plugins/markdown": {
       "name": "@storbild/plugin-markdown",
-      "version": "0.3.0",
+      "version": "0.6.0",
       "dependencies": {
         "dompurify": "3.4.16",
         "marked": "18.0.14",
@@ -235,6 +236,8 @@
     "@typescript/typescript-win32-arm64": ["@typescript/typescript-win32-arm64@7.0.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-Gyl1Vy6OsWesLzmq+EP0Fb7b4Nid5232AvcA2SFcdYreldpNtYFFofPjnt62y9hQy7VTaZp65ICJjuAQRaVcIQ=="],
 
     "@typescript/typescript-win32-x64": ["@typescript/typescript-win32-x64@7.0.2", "", { "os": "win32", "cpu": "x64" }, "sha512-0BQ3HkAHHlKLSp1qRvf3SUhGpGsDuhB/jgFw75guyqbxJqEaS0Cw/VFO8i2nHglJUzQCRtMMR/IBAKE3ETMC4g=="],
+
+    "@zip.js/zip.js": ["@zip.js/zip.js@2.18.2", "", {}, "sha512-J1jwg0Kv5Aab50VlVZ6hp2rzGL/J0YLjBnkF6oJoIjmpxx9+tHgjRELGKryKnDZEcGXKjv7ibwxAziFiWHdR2A=="],
 
     "bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 
