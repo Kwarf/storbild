@@ -42,7 +42,7 @@ const mp4 = bytes(u32be(24), "ftypisom", [0, 0, 2, 0], "isomiso2mp41");
 const webm = bytes([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x86, 0x81, 1, 0x42, 0x82, 0x84], "webm");
 
 describe("sniff", () => {
-  test.each<[string, Uint8Array, ReturnType<typeof sniff>]>([
+  test.each<[string, Uint8Array, Awaited<ReturnType<typeof sniff>>]>([
     ["png", png, { mimeType: "image/png", width: 1, height: 1 }],
     [
       "gif",
@@ -85,6 +85,14 @@ describe("sniff", () => {
         "ftypavif",
         [0, 0, 0, 0],
         "mif1avif",
+        // meta (a full box) › iprp › ipco › ispe, which holds the size.
+        u32be(48),
+        "meta",
+        [0, 0, 0, 0],
+        u32be(36),
+        "iprp",
+        u32be(28),
+        "ipco",
         u32be(20),
         "ispe",
         [0, 0, 0, 0],
@@ -92,6 +100,11 @@ describe("sniff", () => {
         u32be(600),
       ),
       { mimeType: "image/avif", width: 800, height: 600 },
+    ],
+    [
+      "m4v",
+      bytes(u32be(16), "ftypM4V ", [0, 0, 0, 0], u32be(8), "free"),
+      { mimeType: "video/mp4" },
     ],
     [
       "svg with a prolog and px sizes",
@@ -105,11 +118,12 @@ describe("sniff", () => {
       bytes('<svg viewBox="0 0 64.4 32" width="100%">'),
       { mimeType: "image/svg+xml", width: 64, height: 32 },
     ],
+    ["svg with no size", bytes("<svg>"), { mimeType: "image/svg+xml" }],
     ["woff2", bytes("wOF2", [0, 1, 0, 0]), { mimeType: "font/woff2" }],
     ["mp4", mp4, { mimeType: "video/mp4" }],
     ["webm", webm, { mimeType: "video/webm" }],
-  ])("identifies %s", (_, file, expected) => {
-    expect(sniff(file)).toEqual(expected);
+  ])("identifies %s", async (_, file, expected) => {
+    expect(await sniff(file)).toEqual(expected);
   });
 
   test.each([
@@ -118,9 +132,11 @@ describe("sniff", () => {
     ["text", bytes("hello")],
     ["matroska", bytes([0x1a, 0x45, 0xdf, 0xa3, 0x9f, 0x42, 0x82, 0x88], "matroska")],
     ["a QuickTime movie", bytes(u32be(20), "ftypqt  ", [0, 0, 2, 0], "qt  ")],
+    ["HEIC", bytes(u32be(16), "ftypheic", [0, 0, 0, 0], u32be(8), "free")],
+    ["XML that isn't SVG", bytes('<?xml version="1.0"?><html><svg width="1" height="1"/></html>')],
     ["empty", new Uint8Array()],
-  ])("refuses %s", (_, file) => {
-    expect(sniff(file)).toBeUndefined();
+  ])("refuses %s", async (_, file) => {
+    expect(await sniff(file)).toBeUndefined();
   });
 });
 

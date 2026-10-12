@@ -119,7 +119,7 @@ export class AssetStore {
    */
   async ingestThumbnail(id: string, thumbnail: Uint8Array): Promise<boolean> {
     if (!this.#known.has(id) || thumbnail.length > MAX_THUMBNAIL_BYTES) return false;
-    if (sniff(thumbnail)?.mimeType !== "image/webp") return false;
+    if ((await sniff(thumbnail))?.mimeType !== "image/webp") return false;
     await this.#write(this.#thumbnailPath(id), thumbnail);
     return true;
   }
@@ -170,7 +170,7 @@ export class AssetStore {
           }
         }
         if (!sniffed && (done || headSize >= HEAD_BYTES)) {
-          sniffed = sniff(Buffer.concat(head));
+          sniffed = await sniff(Buffer.concat(head));
           head = [];
           if (!sniffed) {
             await abandon();
@@ -204,7 +204,7 @@ export class AssetStore {
     // Some image headers lie past the first bytes; anything but a video is small enough to
     // read whole for its size.
     if (!sniffed.mimeType.startsWith("video/")) {
-      sniffed = sniff(await Bun.file(temporary).bytes()) ?? sniffed;
+      sniffed = (await sniff(await Bun.file(temporary).bytes())) ?? sniffed;
     }
     renameSync(temporary, join(this.#dir, id));
     this.#known.add(id);
@@ -218,7 +218,7 @@ export class AssetStore {
   async setThumbnail(id: string, thumbnail: Uint8Array): Promise<boolean> {
     const asset = assetId.test(id) ? this.#hub.state.assets[id] : undefined;
     if (!asset || thumbnail.length > MAX_THUMBNAIL_BYTES) return false;
-    if (sniff(thumbnail)?.mimeType !== "image/webp") return false;
+    if ((await sniff(thumbnail))?.mimeType !== "image/webp") return false;
     await this.#write(this.#thumbnailPath(id), thumbnail);
     if (!asset.thumbnail) this.#hub.dispatchHost({ type: "asset.setThumbnail", payload: { id } });
     return true;

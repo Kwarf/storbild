@@ -46,7 +46,8 @@ server stays the only writer and viewers get a patch. It answers `200` with the 
   - woff2, for M7's fonts
   - Video waits for M7, which also needs Range requests.
 - **The server reads an image's width and height from its header**, in plain TypeScript
-  (`sniff.ts`). For SVG it uses `width`/`height` in px, else the `viewBox`.
+  (`sniff.ts`). For SVG it uses `width`/`height` in px, else the `viewBox`. ADR 0021 replaces
+  the parsing with file-type and image-size.
 - **The limit is `STORBILD_MAX_UPLOAD_MB`**, 25 by default.
 - **Thumbnails are made by the admin.** It draws a WebP of at most 320 px on a canvas and sends
   it with the file. The server keeps it only if it sniffs as WebP and is at most 256 KB.

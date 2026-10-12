@@ -285,7 +285,7 @@ The commands, fonts, the background layer, scene backgrounds, the interrupt cove
 - The type is sniffed from the content and the size is limited (`STORBILD_MAX_UPLOAD_MB`, and `STORBILD_MAX_VIDEO_UPLOAD_MB` for video) on upload. Uploads are streamed to disk, never held whole in memory ([ADR 0014](docs/decisions/0014-theming.md)). User uploads are never served as a page (`nosniff` and a sandboxing CSP).
 - An asset that an instance or theme uses can't be deleted.
 
-Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
+Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md). Sniffing uses file-type and image-size ([ADR 0021](docs/decisions/0021-file-type-and-image-size-for-sniffing.md)).
 
 **Show files.** The whole show can be exported as one zip (`show.json` plus the assets and their thumbnails) and imported into another install, replacing its show in one revision. Runtime data (live control, the timeline, plugin and instance state, the rotation's anchor) isn't exported ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)). The zip is written and read with zip.js ([ADR 0020](docs/decisions/0020-zip-js-for-show-files.md)).
 
