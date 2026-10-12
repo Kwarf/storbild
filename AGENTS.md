@@ -15,6 +15,7 @@ The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer)
 - `bun run hash-password` — prints an argon2id hash for `STORBILD_ADMIN_PASSWORD_HASH`
 - `bun test` — single file: `bun test path/to/file.test.ts`; single test: `bun test -t "name pattern"`
 - `STORBILD_E2E=1 bun test packages/server/e2e` — viewer and admin e2e tests in Chromium via Playwright (skipped without the env var). Install the browser once with `bunx playwright install chromium` in `packages/server`. The admin test writes light/dark screenshots to `packages/server/e2e/screenshots/` for design review
+- `bun run demo` — seeds a fictional party show on a frozen clock and writes the README screenshots to `docs/screenshots/` (`bun run demo <name>…` for some, `--serve` to keep the demo running on :3000/:3001). The show is in `packages/server/demo/show.ts`, the shots in `shots.ts`; needs the Playwright Chromium like the e2e tests
 - `bun run typecheck` — `tsc --noEmit` in every workspace (each package has its own `tsconfig.json`)
 - `bun run lint` (Biome check), `bun run format` (Biome format). CI runs `bunx biome ci .`
 

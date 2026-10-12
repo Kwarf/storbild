@@ -12,7 +12,8 @@
     "typecheck": "bun run --filter '*' typecheck",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "hash-password": "bun packages/server/src/cli.ts hash-password"
+    "hash-password": "bun packages/server/src/cli.ts hash-password",
+    "demo": "bun packages/server/demo/run.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

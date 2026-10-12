@@ -10,7 +10,7 @@
     ".": "./src/main.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p e2e"
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p e2e && tsc --noEmit -p demo"
   },
   "dependencies": {
     "@hono/zod-validator": "0.9.1",
