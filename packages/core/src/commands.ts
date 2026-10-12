@@ -7,6 +7,7 @@ import { overlaySlotSchema } from "./schema/overlay.ts";
 import { showSettingsSchema } from "./schema/settings.ts";
 import { themeSchema } from "./schema/theme.ts";
 import { interruptBelowSchema } from "./schema/timeline.ts";
+import { showFileSchema } from "./show-file.ts";
 
 function command<T extends string, P extends z.ZodType>(type: T, payload: P) {
   return z.object({ type: z.literal(type), payload });
@@ -166,5 +167,7 @@ export const hostCommandSchema = z.discriminatedUnion("type", [
   command("asset.add", assetMetaSchema),
   /** Marks that the asset store holds a thumbnail for the asset. */
   command("asset.setThumbnail", z.object({ id: assetIdSchema })),
+  /** Replaces the show with an imported show file; its asset files are stored already. */
+  command("show.import", showFileSchema),
 ]);
 export type HostCommand = z.infer<typeof hostCommandSchema>;

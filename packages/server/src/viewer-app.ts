@@ -15,17 +15,32 @@ export interface ViewerAppDeps {
   viewer?: ViewerBundle;
   /** Uploaded files, served at `/assets/<id>`. */
   assets?: AssetStore;
+  /** The service worker script, served at `/sw.js` with the page (ADR 0019). */
+  serviceWorker?: string;
 }
 
 /**
  * The screen-facing app (viewer page, /events, /time). It must never mount admin routes:
  * the screen hostname is proxied here and only here.
  */
-export function createViewerApp({ hub, now, stream, modules, viewer, assets }: ViewerAppDeps) {
+export function createViewerApp({
+  hub,
+  now,
+  stream,
+  modules,
+  viewer,
+  assets,
+  serviceWorker,
+}: ViewerAppDeps) {
   const app = new Hono();
   if (modules) app.route("/", createModuleRoutes(modules));
   if (assets) app.route("/", createAssetRoutes(assets));
-  if (viewer) app.route("/", createViewerPageRoutes(viewer, modules?.importMap ?? { imports: {} }));
+  if (viewer) {
+    app.route(
+      "/",
+      createViewerPageRoutes(viewer, modules?.importMap ?? { imports: {} }, serviceWorker),
+    );
+  }
   app.get("/events", (c) => streamState(c, hub, stream));
   app.get("/time", (c) => {
     c.header("Cache-Control", "no-store");

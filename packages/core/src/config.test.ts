@@ -31,6 +31,7 @@ describe("parseConfig", () => {
       pluginPaths: [],
       maxUploadBytes: 25 * 1024 * 1024,
       maxVideoUploadBytes: 200 * 1024 * 1024,
+      maxImportBytes: 4096 * 1024 * 1024,
     });
   });
 
@@ -45,6 +46,7 @@ describe("parseConfig", () => {
       STORBILD_PLUGIN_PATHS: "/a:/b",
       STORBILD_MAX_UPLOAD_MB: "0.5",
       STORBILD_MAX_VIDEO_UPLOAD_MB: "1000",
+      STORBILD_MAX_IMPORT_MB: "8000",
       STORBILD_VIEWER_URL: "https://screen.example.org",
       STORBILD_ADMIN_URL: "https://admin.example.org",
     });
@@ -61,6 +63,7 @@ describe("parseConfig", () => {
       pluginPaths: ["/a", "/b"],
       maxUploadBytes: 512 * 1024,
       maxVideoUploadBytes: 1000 * 1024 * 1024,
+      maxImportBytes: 8000 * 1024 * 1024,
     });
   });
 

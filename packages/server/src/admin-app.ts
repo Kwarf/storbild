@@ -16,6 +16,7 @@ import {
 } from "./auth.ts";
 import type { PluginSchemas } from "./plugins/load.ts";
 import { createModuleRoutes, type ModuleRegistry } from "./plugins/routes.ts";
+import type { ShowFiles } from "./show-file.ts";
 import { type StreamOptions, streamState } from "./sse.ts";
 import { RevisionConflictError, type StateHub } from "./state-hub.ts";
 
@@ -47,7 +48,14 @@ export interface AdminAppDeps {
   maxUploadBytes?: number;
   /** The largest video upload, in bytes (ADR 0014). */
   maxVideoUploadBytes?: number;
+  /** Show export and import (ADR 0019). */
+  showFiles?: ShowFiles;
+  /** The largest show file that can be imported, in bytes. */
+  maxImportBytes?: number;
 }
+
+/** The largest command body. Bun's own request limit is far larger, for uploads. */
+const MAX_COMMAND_BYTES = 1024 * 1024;
 
 /**
  * Bun passes its server as the second argument to `fetch`, which tells the client address.
@@ -74,6 +82,8 @@ export function createAdminApp({
   assets,
   maxUploadBytes = 25 * 1024 * 1024,
   maxVideoUploadBytes = 200 * 1024 * 1024,
+  showFiles,
+  maxImportBytes = 4096 * 1024 * 1024,
 }: AdminAppDeps) {
   const { sessions, limiter } = auth;
   const secure = new URL(auth.publicUrl).protocol === "https:";
@@ -241,8 +251,44 @@ export function createAdminApp({
           return c.body(null, 204);
         },
       )
+      .get("/api/show/export", (c) => {
+        if (!showFiles) return c.json({ error: "not_found" as const }, 404);
+        const date = new Date(now()).toISOString().slice(0, 10);
+        return c.body(showFiles.export(), 200, {
+          "Content-Type": "application/zip",
+          "Content-Disposition": `attachment; filename="storbild-show-${date}.zip"`,
+          "Cache-Control": "no-store",
+        });
+      })
+      // Replaces the show with an exported one, sent as the raw body (ADR 0019).
+      .post("/api/show/import", async (c) => {
+        if (!showFiles)
+          return c.json({ error: "not_found" as const, message: "no show files" }, 404);
+        const tooLargeImport = {
+          error: "too_large" as const,
+          message: `Show files can be at most ${megabytes(maxImportBytes)} MB.`,
+        };
+        if (Number(c.req.header("Content-Length")) > maxImportBytes) {
+          return c.json(tooLargeImport, 413);
+        }
+        const body = c.req.raw.body;
+        if (!body) {
+          return c.json({ error: "invalid_show_file" as const, message: "no file was sent" }, 400);
+        }
+        const result = await showFiles.import(body, maxImportBytes);
+        if (!result.ok) {
+          const { ok: _, status, ...error } = result;
+          return c.json(error, status);
+        }
+        return c.json({ revision: result.revision, missingPlugins: result.missingPlugins }, 200);
+      })
       .post(
         "/api/commands",
+        bodyLimit({
+          maxSize: MAX_COMMAND_BYTES,
+          onError: (c) =>
+            c.json({ error: "too_large" as const, message: "The command is too large." }, 413),
+        }),
         zValidator("json", commandRequestSchema, (result, c) => {
           if (!result.success) {
             return c.json({ error: "invalid_command", issues: result.error.issues }, 400);

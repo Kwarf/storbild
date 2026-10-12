@@ -80,6 +80,68 @@ export class AssetStore {
     name: string,
     limits: UploadLimits = {},
   ): Promise<UploadResult> {
+    const stored = await this.#store(body, limits);
+    if (!stored.ok) {
+      if (stored.status === 400) throw new Error("unreachable: an upload has no expected ID");
+      return stored;
+    }
+    const { id, size, sniffed } = stored;
+    this.#hub.dispatchHost({
+      type: "asset.add",
+      payload: {
+        id,
+        name: name.trim().slice(0, 200) || "Untitled",
+        size,
+        ...sniffed,
+        createdAt: this.#now(),
+      },
+    });
+    return { ok: true, asset: this.#hub.state.assets[id] as AssetMeta };
+  }
+
+  /**
+   * Stores the file of an asset from an imported show (ADR 0019), without registering it: the
+   * import does that for all assets at once. The content must hash to `meta.id`. Returns the
+   * metadata with the type, size and dimensions sniffed from the content, or undefined when
+   * the content doesn't match or isn't an allowed type.
+   */
+  async ingest(body: ReadableStream<Uint8Array>, meta: AssetMeta): Promise<AssetMeta | undefined> {
+    const stored = await this.#store(body, {}, meta.id);
+    if (!stored.ok) return undefined;
+    // The thumbnail flag is set again only if the import stores one.
+    const { width: _, height: __, thumbnail: ___, ...rest } = meta;
+    return { ...rest, size: stored.size, ...stored.sniffed };
+  }
+
+  /**
+   * Stores the thumbnail of an ingested asset, under the same rules as `setThumbnail`. Returns
+   * whether it was kept.
+   */
+  async ingestThumbnail(id: string, thumbnail: Uint8Array): Promise<boolean> {
+    if (!this.#known.has(id) || thumbnail.length > MAX_THUMBNAIL_BYTES) return false;
+    if (sniff(thumbnail)?.mimeType !== "image/webp") return false;
+    await this.#write(this.#thumbnailPath(id), thumbnail);
+    return true;
+  }
+
+  /** Deletes the files of assets that aren't in the show, such as those of a failed import. */
+  discardUnused() {
+    this.#collect();
+  }
+
+  /**
+   * Streams a file to disk under its SHA-256. With `expectedId`, a file that hashes to anything
+   * else is discarded.
+   */
+  async #store(
+    body: ReadableStream<Uint8Array>,
+    limits: UploadLimits,
+    expectedId?: string,
+  ): Promise<
+    | { ok: true; id: string; size: number; sniffed: Sniffed }
+    | Exclude<UploadResult, { ok: true }>
+    | { ok: false; status: 400; error: "mismatch" }
+  > {
     const reader = body.getReader();
     const temporary = join(this.#dir, `${crypto.randomUUID()}.tmp`);
     const hasher = new Bun.CryptoHasher("sha256");
@@ -134,26 +196,19 @@ export class AssetStore {
       throw error;
     }
     if (!sniffed) throw new Error("unreachable: an upload ends with its type judged");
+    const id = hasher.digest("hex");
+    if (expectedId !== undefined && id !== expectedId) {
+      rmSync(temporary, { force: true });
+      return { ok: false, status: 400, error: "mismatch" };
+    }
     // Some image headers lie past the first bytes; anything but a video is small enough to
     // read whole for its size.
     if (!sniffed.mimeType.startsWith("video/")) {
       sniffed = sniff(await Bun.file(temporary).bytes()) ?? sniffed;
     }
-    const id = hasher.digest("hex");
     renameSync(temporary, join(this.#dir, id));
-
-    this.#hub.dispatchHost({
-      type: "asset.add",
-      payload: {
-        id,
-        name: name.trim().slice(0, 200) || "Untitled",
-        size,
-        ...sniffed,
-        createdAt: this.#now(),
-      },
-    });
     this.#known.add(id);
-    return { ok: true, asset: this.#hub.state.assets[id] as AssetMeta };
+    return { ok: true, id, size, sniffed };
   }
 
   /**

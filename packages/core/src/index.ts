@@ -22,4 +22,5 @@ export * from "./schema/settings.ts";
 export * from "./schema/state.ts";
 export * from "./schema/theme.ts";
 export * from "./schema/timeline.ts";
+export * from "./show-file.ts";
 export * from "./timeline.ts";

@@ -12,21 +12,57 @@ import {
   testConfig,
 } from "./testing.ts";
 import { createViewerApp } from "./viewer-app.ts";
-import { getViewerBundle } from "./viewer-page.ts";
+import {
+  getServiceWorkerCode,
+  getViewerBundle,
+  precacheUrls,
+  serviceWorkerScript,
+} from "./viewer-page.ts";
 
-const [viewer, adminBundle] = await Promise.all([getViewerBundle(), getAdminBundle()]);
+const [viewer, adminBundle, serviceWorkerCode] = await Promise.all([
+  getViewerBundle(),
+  getAdminBundle(),
+  getServiceWorkerCode(),
+]);
 
 describe("viewer app", () => {
   const importMap = { imports: { lit: "/vendor/abc/lit/index.js" } };
+  const file = { body: new Blob(["//"]), type: "text/javascript" };
+  const modules = {
+    vendor: { hash: "abc", files: new Map([["lit/index.js", file]]), specifiers: {} },
+    plugins: new Map([["markdown", { version: "1.2.0", files: new Map([["viewer.js", file]]) }]]),
+    importMap,
+  };
+  const serviceWorker = serviceWorkerScript(serviceWorkerCode, precacheUrls(viewer, modules));
   const app = createViewerApp({
     hub: createTestHub(),
     now: () => 1234,
     viewer,
-    modules: {
-      vendor: { hash: "abc", files: new Map(), specifiers: {} },
-      plugins: new Map(),
-      importMap,
-    },
+    modules,
+    serviceWorker,
+  });
+
+  test("serves the service worker with a manifest of everything a screen needs", async () => {
+    const res = await app.request("/sw.js");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toStartWith("text/javascript");
+    expect(res.headers.get("Cache-Control")).toBe("no-cache");
+    const code = await res.text();
+    const manifest = JSON.parse(/^self\.__STORBILD__=(.*);$/m.exec(code)?.[1] ?? "null") as {
+      version: string;
+      precache: string[];
+    };
+    expect(manifest.precache).toEqual([
+      "/",
+      ...[...viewer.files.keys()].map((path) => `/app/${viewer.hash}/${path}`),
+      "/vendor/abc/lit/index.js",
+      "/plugins/markdown/1.2.0/viewer.js",
+    ]);
+    // A classic script, which every browser registers.
+    expect(code).not.toMatch(/^\s*(?:import|export)\s/m);
+    // Any change to what is precached makes a new worker.
+    const other = serviceWorkerScript(serviceWorkerCode, [...manifest.precache, "/x"]);
+    expect(other).not.toContain(manifest.version);
   });
 
   test("serves the viewer page uncached, with the import map inline", async () => {

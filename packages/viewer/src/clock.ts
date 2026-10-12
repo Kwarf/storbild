@@ -30,6 +30,7 @@ export class ClockSync {
   #syncing: Promise<void> | undefined;
   #timer: unknown;
   #stopped = true;
+  #synced = false;
 
   constructor(options: ClockSyncOptions) {
     this.#options = { samples: 8, intervalMs: 5 * 60_000, ...options };
@@ -41,6 +42,15 @@ export class ClockSync {
 
   get offset(): number {
     return this.#clock.offset;
+  }
+
+  /**
+   * Starts from an offset kept from an earlier visit, such as the one stored with the last
+   * state (ADR 0019), so a screen that boots during an outage keeps the server's time. It is
+   * ignored once a sync has succeeded, and the first sync slews from it.
+   */
+  seed(offset: number) {
+    if (!this.#synced) this.#clock.setOffset(offset);
   }
 
   start() {
@@ -84,6 +94,9 @@ export class ClockSync {
       }
     }
     const offset = estimateOffset(samples);
-    if (offset !== undefined) this.#clock.setOffset(offset);
+    if (offset !== undefined) {
+      this.#clock.setOffset(offset);
+      this.#synced = true;
+    }
   }
 }

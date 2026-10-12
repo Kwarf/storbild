@@ -10,6 +10,7 @@ import type { PlaylistItem } from "./schema/playlist.ts";
 import type { PluginCatalog, PluginEntry } from "./schema/plugin.ts";
 import { defaultThemeValues, type ShowState } from "./schema/state.ts";
 import type { Theme } from "./schema/theme.ts";
+import { importShow } from "./show-file.ts";
 import { isPlayableScene, resolveTimeline } from "./timeline.ts";
 
 export interface CommandContext {
@@ -336,6 +337,9 @@ function reduce(
 
     case "live.blackout":
       return { state: { ...state, live: { ...state.live, blackout: command.payload.on } } };
+
+    case "show.import":
+      return { state: importShow(state, command.payload, ctx) };
 
     case "instance.setState": {
       const { id, state: value } = command.payload;

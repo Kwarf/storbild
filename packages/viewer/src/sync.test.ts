@@ -117,12 +117,27 @@ beforeEach(() => {
     reload: () => reloads++,
     onState: (state) => states.push(state),
     onConnect: () => connects++,
+    now: () => timers.now,
     log: () => {},
   });
   client.start();
 });
 
 describe("SyncClient", () => {
+  test("remembers when the server was last heard from, pings included", async () => {
+    expect(client.lastMessageAt).toBeUndefined();
+    last().open();
+    await timers.advance(1_000);
+    last().snapshot(base);
+    expect(client.lastMessageAt).toBe(1_000);
+    await timers.advance(15_000);
+    last().emit("ping", "1");
+    expect(client.lastMessageAt).toBe(16_000);
+    last().fail(false);
+    expect(client.connected).toBe(false);
+    expect(client.lastMessageAt).toBe(16_000);
+  });
+
   test("takes a snapshot, then applies patches", () => {
     last().open();
     last().snapshot(base);

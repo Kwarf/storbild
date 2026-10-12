@@ -30,6 +30,10 @@ const MAX_WAIT_MS = 60_000;
  * until then the previous theme stays, and before the first one nothing is shown. A scene
  * that draws its own background, or has one of its own, fades the theme background out.
  *
+ * A screen that has lost the server says so in a small pill at the bottom right of the safe
+ * area, above everything but the blackout, when `offline` holds its text (ADR 0019). The
+ * admin preview never sets it.
+ *
  * What is on air comes from `resolveTimeline(state, serverNow())`, not from the server's
  * `timeline`, and is resolved again at the next boundary. So the screen switches at
  * `next.startsAt` even when the patch is late, and keeps the rotation going without one
@@ -40,6 +44,7 @@ export class Compositor extends LitElement {
   static override properties: PropertyDeclarations = {
     state: { attribute: false },
     ctx: { attribute: false },
+    offline: { attribute: false },
   };
 
   static override styles = css`
@@ -183,10 +188,47 @@ export class Compositor extends LitElement {
       min-width: 0;
       max-width: 100%;
     }
+
+    .offline {
+      box-sizing: border-box;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      padding: var(--sb-safe-area, 96px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 600ms ease-in-out;
+    }
+    .offline.on {
+      opacity: 1;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 22px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--sb-color-surface, #1a1a1a) 80%, transparent);
+      color: var(--sb-color-muted, #a0a0a0);
+      font-family: var(--sb-font-body, sans-serif);
+      font-size: 24px;
+      line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .pill::before {
+      content: "";
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: currentColor;
+    }
   `;
 
   declare state: ShowState | undefined;
   declare ctx: ViewerContext;
+  /** The offline indicator's text, while the screen has lost the server. */
+  declare offline: string | undefined;
 
   #background: BackgroundLayer | undefined;
   #main: SceneLayer | undefined;
@@ -198,6 +240,8 @@ export class Compositor extends LitElement {
   #theme: Theme | undefined;
   #customCss: CSSStyleSheet | undefined;
   #customCssText = "";
+  /** The indicator's last text, kept while it fades out. */
+  #offlineText = "";
 
   protected override willUpdate() {
     const { state, ctx } = this;
@@ -227,6 +271,8 @@ export class Compositor extends LitElement {
     // again, even beneath a scene with its own background (ADR 0014).
     const covered = below === "hide";
     const main = timeline?.main?.instanceId;
+    if (this.offline) this.#offlineText = this.offline;
+    const offline = this.offline !== undefined && !timeline?.blackout;
     const ownBackground =
       state !== undefined &&
       main !== undefined &&
@@ -238,6 +284,9 @@ export class Compositor extends LitElement {
       <div class="layer overlays ${covered ? "off" : ""}" part="overlays"></div>
       <div class="layer dim ${below === "dim" ? "on" : ""}"></div>
       <div class="layer interrupt" part="interrupt"></div>
+      <div class="layer offline ${offline ? "on" : ""}" part="offline">
+        <span class="pill">${this.#offlineText}</span>
+      </div>
       <div class="layer blackout ${timeline?.blackout ? "on" : ""}" part="blackout"></div>
     `;
   }

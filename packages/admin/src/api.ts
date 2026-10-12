@@ -67,3 +67,46 @@ export async function fetchSchemas(): Promise<Schemas> {
   if (!res.ok) throw new Error(`Failed to load plugin schemas (${res.status}).`);
   return (await res.json()) as Schemas;
 }
+
+/** An import the server refused; `details` lists what was wrong in the file, if it said. */
+export class ImportFailed extends Error {
+  override name = "ImportFailed";
+  constructor(
+    message: string,
+    readonly details: string[] = [],
+  ) {
+    super(message);
+  }
+}
+
+/** The URL that downloads the show as a show file (ADR 0019). */
+export const showExportUrl = () => api.api.show.export.$url().pathname;
+
+/**
+ * Replaces the show with a show file, sent as the raw request body (ADR 0019). Resolves with
+ * the plugins the imported show uses that this server lacks.
+ */
+export async function importShow(file: File): Promise<{ missingPlugins: string[] }> {
+  let res: Response;
+  try {
+    res = await fetch(api.api.show.import.$url(), { method: "POST", body: file });
+  } catch {
+    throw new ImportFailed("Can't reach the server.");
+  }
+  if (res.status === 401) {
+    toLogin();
+    throw new ImportFailed("Your session has expired.");
+  }
+  const body = (await res.json().catch(() => ({}))) as {
+    message?: string;
+    issues?: { path: PropertyKey[]; message: string }[];
+    missingPlugins?: string[];
+  };
+  if (!res.ok) {
+    throw new ImportFailed(
+      body.message ?? `Import failed (${res.status}).`,
+      (body.issues ?? []).map((issue) => `${issue.path.join(".") || "(file)"}: ${issue.message}`),
+    );
+  }
+  return { missingPlugins: body.missingPlugins ?? [] };
+}

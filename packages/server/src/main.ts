@@ -15,11 +15,17 @@ import {
   type RestartOptions,
 } from "./plugins/index.ts";
 import { Scheduler, type SchedulerTimers } from "./scheduler.ts";
+import { ShowFiles } from "./show-file.ts";
 import type { StreamOptions } from "./sse.ts";
 import { StateHub } from "./state-hub.ts";
 import { loadState, saveState } from "./store.ts";
 import { createViewerApp } from "./viewer-app.ts";
-import { getViewerBundle } from "./viewer-page.ts";
+import {
+  getServiceWorkerCode,
+  getViewerBundle,
+  precacheUrls,
+  serviceWorkerScript,
+} from "./viewer-page.ts";
 
 export type { AdminApp } from "./admin-app.ts";
 
@@ -89,7 +95,13 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   scheduler.start();
   const assets = new AssetStore({ dir: join(config.dataDir, "assets"), hub, now });
   assets.start();
-  const [viewerBundle, adminBundle] = await Promise.all([getViewerBundle(), getAdminBundle()]);
+  const showFiles = new ShowFiles({ hub, assets, tmpDir: join(config.dataDir, "tmp"), now });
+  showFiles.start();
+  const [viewerBundle, adminBundle, serviceWorkerCode] = await Promise.all([
+    getViewerBundle(),
+    getAdminBundle(),
+    getServiceWorkerCode(),
+  ]);
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
 
@@ -106,6 +118,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       modules: registry,
       viewer: viewerBundle,
       assets,
+      serviceWorker: serviceWorkerScript(serviceWorkerCode, precacheUrls(viewerBundle, registry)),
       ...(stream && { stream }),
     }).fetch,
   });
@@ -113,8 +126,11 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     hostname: config.host,
     port: config.admin.port,
     idleTimeout,
-    // Bun refuses larger bodies before the app sees them; uploads are streamed (ADR 0014).
-    maxRequestBodySize: Math.max(config.maxUploadBytes, config.maxVideoUploadBytes) + 1024 * 1024,
+    // Bun refuses larger bodies before the app sees them; uploads and imports are streamed
+    // (ADR 0014, ADR 0019).
+    maxRequestBodySize:
+      Math.max(config.maxUploadBytes, config.maxVideoUploadBytes, config.maxImportBytes) +
+      1024 * 1024,
     fetch: createAdminApp({
       hub,
       now,
@@ -134,6 +150,8 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       assets,
       maxUploadBytes: config.maxUploadBytes,
       maxVideoUploadBytes: config.maxVideoUploadBytes,
+      showFiles,
+      maxImportBytes: config.maxImportBytes,
       ...(stream && { stream }),
     }).fetch,
   });

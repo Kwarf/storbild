@@ -70,3 +70,19 @@ test("a failed sync keeps the current offset", async () => {
   await s.clock.sync();
   expect(s.clock.offset).toBe(2_000);
 });
+
+test("a seed applies until the first sync, which slews from it", async () => {
+  const s = setup(5_300);
+  s.clock.seed(5_000);
+  expect(s.clock.offset).toBe(5_000);
+  s.setFailing(true);
+  await s.clock.sync();
+  expect(s.clock.offset).toBe(5_000);
+  s.setFailing(false);
+  await s.clock.sync();
+  // Within a second of the seed, the new estimate is slewed toward, not snapped to.
+  expect(s.clock.offset).toBeGreaterThanOrEqual(5_000);
+  expect(s.clock.offset).toBeLessThan(5_300);
+  s.clock.seed(0);
+  expect(s.clock.offset).toBeGreaterThanOrEqual(5_000);
+});

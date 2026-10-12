@@ -287,6 +287,8 @@ The commands, fonts, the background layer, scene backgrounds, the interrupt cove
 
 Uploads, sniffing, serving, the asset picker and deletion are specified in [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md).
 
+**Show files.** The whole show can be exported as one zip (`show.json` plus the assets and their thumbnails) and imported into another install, replacing its show in one revision. Runtime data (live control, the timeline, plugin and instance state, the rotation's anchor) isn't exported ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
+
 ### 4.8 Full state
 
 ```ts
@@ -363,6 +365,8 @@ live.take | live.interrupt | live.clearInterrupt | live.resume | live.blackout
 `live.take` and `live.interrupt` take `{ instanceId, durationMs?, … }`; without a duration they hold until `live.resume` or `live.clearInterrupt` ([ADR 0006](docs/decisions/0006-scheduler-and-timeline.md)).
 
 M1 implements `instance.*` and `playlist.*`. The others arrive with the milestone that gives them meaning: `plugin.updateSettings` in M2, `live.*` in M4, `settings.update` and `plugin.remove` (only for a `missing` plugin) in M6a, `cue.*`, `asset.update` and `asset.delete` in M6b, `theme.*` in M7 and `overlay.*` in M8 ([ADR 0003](docs/decisions/0003-state-sync-and-persistence.md), [ADR 0010](docs/decisions/0010-admin-forms-and-content-pages.md), [ADR 0011](docs/decisions/0011-assets-schedule-and-quick-announce.md)). Assets are added by uploading them, which issues the host-only `asset.add`. A cue's `at` must be in the future, and a fired cue can only be deleted. `overlay.place` takes an instance of an overlay type and a slot, each instance is placed at most once, and `overlay.update` moves a placement within or across slots ([ADR 0012](docs/decisions/0012-overlays.md)). A theme's files must exist and be of the right kind, the active theme can't be deleted, and deleting a theme removes the unfired cues that would activate it ([ADR 0014](docs/decisions/0014-theming.md)).
+
+`GET /api/show/export` downloads the show file, and `POST /api/show/import` replaces the show with one through the host-only `show.import` ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
 
 From M2, instance config and plugin settings are validated by the plugin's schemas: an unknown plugin or type is `404`, and an invalid config or settings value is `422` with `issues`. The plugin runtime writes through host-only commands (`plugin.setState`, `plugin.setStatus`, `instance.setState`), which `POST /api/commands` does not accept ([ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md)).
 
@@ -458,7 +462,8 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - The EventSource reconnects automatically. If the browser gives up (for example on a proxy 502), the viewer reopens it with backoff.
   - A watchdog reloads the page if there's no message or heartbeat for 60 s, but only if the server answers `/time`. Otherwise it reopens the stream and keeps waiting, so a kiosk is never left on an error page.
   - A failing scene never stops the show. If `prepare()` fails, the scene is shown anyway; if its module can't load, only the layers below show.
-  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. A screen clock that trails just behind a fresh anchor resolves at the anchor ([ADR 0013](docs/decisions/0013-screen-clock-lag-at-the-anchor.md)). On `visibilitychange` it re-resolves at once. M10a adds offline caching.
+  - The compositor renders `resolveTimeline(state, serverNow())` and resolves again at the next boundary, so it switches at `next.startsAt` even when the patch is late, and keeps the rotation going during outages. A screen clock that trails just behind a fresh anchor resolves at the anchor ([ADR 0013](docs/decisions/0013-screen-clock-lag-at-the-anchor.md)). On `visibilitychange` it re-resolves at once.
+  - **Offline starts.** A service worker precaches the page, bundles and plugin modules, and caches the assets the show uses. The viewer keeps its last state and clock offset, and starts from them when the server doesn't answer, so a reload during an outage keeps playing. A small "Offline · last update …" pill shows when a screen has been out of touch for 10 s ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
 - **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.
@@ -488,7 +493,7 @@ Sync client, bundling and failure handling are specified in [ADR 0005](docs/deci
 - **Overlays:** a slot diagram plus the placement list.
 - **Theme:** a theme editor with live preview, and activation.
 - **Plugins:** status and settings per plugin.
-- **Settings:** global defaults (default duration, transition length), stored in state.
+- **Settings:** global defaults (default duration, transition length), stored in state, and the show file: export, and import that replaces the show.
 
 ### 8.3 Visual design
 
@@ -693,6 +698,8 @@ Markdown rendering, plugin dependencies, the countdown, the Wi-Fi QR code and it
 **Done when:** a screen keeps playing through a network outage and a server restart and resyncs afterwards, and an exported show imports into a fresh install and plays the same.
 
 **Deferred:** deployment, plugin authoring and the soak test (M10b).
+
+The service worker, the stored state, the offline indicator and show files are specified in [ADR 0019](docs/decisions/0019-resilience-and-show-files.md).
 
 ### M10b — Operations and release
 

@@ -15,6 +15,7 @@ const envSchema = z
     STORBILD_PLUGIN_PATHS: z.string().default(""),
     STORBILD_MAX_UPLOAD_MB: z.coerce.number().positive().max(1024).default(25),
     STORBILD_MAX_VIDEO_UPLOAD_MB: z.coerce.number().positive().max(4096).default(200),
+    STORBILD_MAX_IMPORT_MB: z.coerce.number().positive().max(65536).default(4096),
     STORBILD_VIEWER_URL: z.url().default("http://localhost:3000"),
     STORBILD_ADMIN_URL: z.url().default("http://localhost:3001"),
   })
@@ -36,6 +37,8 @@ export interface Config {
   maxUploadBytes: number;
   /** The largest video upload, in bytes. */
   maxVideoUploadBytes: number;
+  /** The largest show file that can be imported, in bytes (ADR 0019). */
+  maxImportBytes: number;
 }
 
 export class ConfigError extends Error {
@@ -74,5 +77,6 @@ export function parseConfig(env: Record<string, string | undefined>, pathDelimit
       .filter((p) => p !== ""),
     maxUploadBytes: Math.floor(e.STORBILD_MAX_UPLOAD_MB * 1024 * 1024),
     maxVideoUploadBytes: Math.floor(e.STORBILD_MAX_VIDEO_UPLOAD_MB * 1024 * 1024),
+    maxImportBytes: Math.floor(e.STORBILD_MAX_IMPORT_MB * 1024 * 1024),
   };
 }

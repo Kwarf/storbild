@@ -12,6 +12,7 @@ import { AssetStore } from "./assets.ts";
 import { LoginLimiter, SessionStore } from "./auth.ts";
 import { openDatabase } from "./db.ts";
 import type { SchedulerTimers } from "./scheduler.ts";
+import { ShowFiles } from "./show-file.ts";
 import { StateHub } from "./state-hub.ts";
 import { saveState } from "./store.ts";
 
@@ -87,6 +88,9 @@ export interface TestAdminAppOptions {
   assetsDir?: string;
   maxUploadBytes?: number;
   maxVideoUploadBytes?: number;
+  /** A directory for show imports; with `assetsDir`, the app exports and imports shows. */
+  tmpDir?: string;
+  maxImportBytes?: number;
 }
 
 /** An admin app on `createTestHub()`, with sessions in memory and time on a `FakeClock`. */
@@ -98,10 +102,15 @@ export function createTestAdminApp({
   assetsDir,
   maxUploadBytes,
   maxVideoUploadBytes,
+  tmpDir,
+  maxImportBytes,
 }: TestAdminAppOptions = {}) {
   const hub = createTestHub();
   const assets = assetsDir ? new AssetStore({ dir: assetsDir, hub, now: clock.now }) : undefined;
   assets?.start();
+  const showFiles =
+    assets && tmpDir ? new ShowFiles({ hub, assets, tmpDir, now: clock.now }) : undefined;
+  showFiles?.start();
   const sessions = new SessionStore(openDatabase(":memory:"), { now: clock.now });
   const app = createAdminApp({
     hub,
@@ -118,6 +127,8 @@ export function createTestAdminApp({
     ...(assets && { assets }),
     ...(maxUploadBytes !== undefined && { maxUploadBytes }),
     ...(maxVideoUploadBytes !== undefined && { maxVideoUploadBytes }),
+    ...(showFiles && { showFiles }),
+    ...(maxImportBytes !== undefined && { maxImportBytes }),
   });
   return { app, hub, sessions, clock, assets };
 }

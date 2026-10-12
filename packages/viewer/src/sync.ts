@@ -30,6 +30,8 @@ export interface SyncClientOptions {
   onState(state: ShowState): void;
   /** Called when a stream opens, the first time and after every reconnect. */
   onConnect?(): void;
+  /** The clock `lastMessageAt` is read from. */
+  now?(): number;
   /** Silence (no snapshot, patch or ping) after which the page reloads, if the server answers. */
   watchdogMs?: number;
   /** Backoff for reopening a stream the browser closed. */
@@ -59,6 +61,7 @@ export class SyncClient {
   #reopen: unknown;
   #backoffMs: number;
   #stopped = false;
+  #lastMessageAt: number | undefined;
 
   constructor(options: SyncClientOptions) {
     this.#options = {
@@ -73,6 +76,11 @@ export class SyncClient {
 
   get state(): ShowState | undefined {
     return this.#state;
+  }
+
+  /** When the last snapshot, patch or ping arrived, by `now`; undefined before the first. */
+  get lastMessageAt(): number | undefined {
+    return this.#lastMessageAt;
   }
 
   /** Whether a stream is currently open. */
@@ -112,16 +120,16 @@ export class SyncClient {
     };
     source.addEventListener("snapshot", (event) => {
       if (!current()) return;
-      this.#alive();
+      this.#heard();
       this.#setState(JSON.parse(event.data) as ShowState);
     });
     source.addEventListener("patch", (event) => {
       if (!current()) return;
-      this.#alive();
+      this.#heard();
       this.#onPatch(Number(event.lastEventId), event.data);
     });
     source.addEventListener("ping", () => {
-      if (current()) this.#alive();
+      if (current()) this.#heard();
     });
     this.#alive();
   }
@@ -159,6 +167,12 @@ export class SyncClient {
     this.#backoffMs = Math.min(this.#backoffMs * 2, this.#options.maxBackoffMs);
     this.#options.timers.clearTimeout(this.#reopen);
     this.#reopen = this.#options.timers.setTimeout(() => this.#open(), delay);
+  }
+
+  /** A message arrived from the server. */
+  #heard() {
+    this.#lastMessageAt = (this.#options.now ?? Date.now)();
+    this.#alive();
   }
 
   /** Re-arms the watchdog. */
