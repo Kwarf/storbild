@@ -44,7 +44,10 @@ function makePng(width: number, height: number, rgb: [number, number, number]): 
 function toLocalInput(epochMs: number): string {
   const date = new Date(epochMs);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  // Chromium drops `:00` seconds from the value, and Playwright's fill rejects a value that
+  // doesn't read back the same.
+  const seconds = date.getSeconds() ? `:${pad(date.getSeconds())}` : "";
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}${seconds}`;
 }
 
 describe.skipIf(!enabled)("assets, schedule and quick announce", () => {
