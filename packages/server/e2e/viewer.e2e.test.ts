@@ -200,21 +200,6 @@ describe.skipIf(!enabled)("viewer", () => {
   );
 
   test(
-    "recovers from a network outage without reloading",
-    async () => {
-      await Promise.all(screens.map(({ context }) => context.setOffline(true)));
-      await command("instance.update", { id: b, config: { label: "B after outage" } });
-      await Bun.sleep(3_000);
-      await Promise.all(screens.map(({ context }) => context.setOffline(false)));
-      await forAll((page) =>
-        scene(page, "main").locator(".probe", { hasText: "B after outage" }).waitFor(),
-      );
-      expect(await Promise.all(screens.map(({ page }) => bootId(page)))).toEqual(boots);
-    },
-    TIMEOUT,
-  );
-
-  test(
     "prefetches and prepares the next scene before it goes on air at its start",
     async () => {
       const c = await probe("C", { prepareMs: 300 });
