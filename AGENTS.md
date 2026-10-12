@@ -19,7 +19,7 @@ The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer)
 - `bun run typecheck` — `tsc --noEmit` in every workspace (each package has its own `tsconfig.json`)
 - `bun run lint` (Biome check), `bun run format` (Biome format). CI runs `bunx biome ci .`
 
-CI is a GitHub-style workflow in `.github/workflows/ci.yml`, currently run by Forgejo Actions (runner label `ubuntu-latest`). Keep it portable to GitHub Actions. The Bun version is pinned in `.bun-version`.
+CI is a GitHub Actions workflow in `.github/workflows/ci.yml` ([ADR 0022](docs/decisions/0022-move-to-github.md)). The Bun version is pinned in `.bun-version`.
 
 Some rules below are enforced by tooling ([ADR 0002](docs/decisions/0002-configuration-and-tooling.md)): `packages/core` has no DOM, Bun or Node types, so timers and I/O fail typecheck, and Biome's `noRestrictedImports` blocks forbidden imports in `packages/core` and `plugins/`. New packages need a `typecheck` script and a `tsconfig.json` that extends `tsconfig.base.json`.
 

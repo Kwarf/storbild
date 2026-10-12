@@ -4,7 +4,7 @@ Date: 2026-10-11
 
 ## Status
 
-Accepted
+Accepted. The project's hosting and the CI workflow's portability rules are replaced by ADR 0022.
 
 ## Context
 
