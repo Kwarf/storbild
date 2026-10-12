@@ -249,13 +249,20 @@ describe.skipIf(!enabled)("viewer", () => {
       await setPlaylist({ instanceId: p, durationMs: 2_000 }, { instanceId: q, durationMs: 2_000 });
       await forAll((page) => scene(page, "main").locator(".probe", { hasText: "P" }).waitFor());
 
-      await Promise.all(screens.map(({ context }) => context.setOffline(true)));
-      // No patches arrive: each screen switches on its own clock.
+      // Stopping the server cuts the streams for certain; Chromium's offline emulation leaves
+      // an open stream running (ADR 0019). No patches arrive: each screen switches on its own
+      // clock.
+      await storbild.stop();
       await forAll(async (page) => {
+        await page.waitForFunction(
+          () =>
+            !(document.querySelector("sb-viewer") as unknown as { sync: { connected: boolean } })
+              .sync.connected,
+        );
         await scene(page, "main").locator(".probe", { hasText: "Q" }).waitFor();
         await scene(page, "main").locator(".probe", { hasText: "P" }).waitFor();
       });
-      await Promise.all(screens.map(({ context }) => context.setOffline(false)));
+      await boot();
       expect(await Promise.all(screens.map(({ page }) => bootId(page)))).toEqual(boots);
     },
     TIMEOUT,
