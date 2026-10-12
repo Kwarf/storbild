@@ -11,11 +11,8 @@ import { join } from "node:path";
 import type { AssetMeta } from "@storbild/core";
 import { type Browser, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
-import { adminHeaders, TEST_PASSWORD, testConfig } from "../src/testing.ts";
-
-const enabled = process.env.STORBILD_E2E === "1";
-const TIMEOUT = 30_000;
-const screenshots = join(import.meta.dir, "screenshots");
+import { adminHeaders, testConfig } from "../src/testing.ts";
+import { enabled, logIn, screenshots, shot, TIMEOUT, until } from "./helpers.ts";
 
 /** A bold woff2 from the admin's own font package. */
 const fontPath = Bun.resolveSync(
@@ -39,21 +36,6 @@ describe.skipIf(!enabled)("theming", () => {
   let image: AssetMeta;
 
   const state = () => storbild.hub.state;
-  const until = async (check: () => boolean, timeoutMs = 5_000) => {
-    const deadline = Date.now() + timeoutMs;
-    while (!check()) {
-      if (Date.now() > deadline) throw new Error("condition not met in time");
-      await Bun.sleep(25);
-    }
-  };
-  const shot = async (page: Page, name: string) => {
-    for (const colorScheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme });
-      await Bun.sleep(300);
-      await page.screenshot({ path: join(screenshots, `${name}-${colorScheme}.png`) });
-    }
-    await page.emulateMedia({ colorScheme: "light" });
-  };
   const go = async (section: string) => {
     await admin.getByRole("link", { name: section }).click();
     await admin.getByRole("heading", { name: section, level: 1 }).waitFor();
@@ -119,11 +101,7 @@ describe.skipIf(!enabled)("theming", () => {
       page.on("pageerror", (error) => console.error("page error:", error));
     }
     await screen.goto(storbild.viewer.url.href);
-    await admin.goto(storbild.admin.url.href);
-    await admin.getByLabel("Username").fill("admin");
-    await admin.getByLabel("Password").fill(TEST_PASSWORD);
-    await admin.getByRole("button", { name: "Log in" }).click();
-    await admin.waitForURL((url) => url.pathname === "/live");
+    await logIn(admin, storbild.admin.url);
   }, TIMEOUT);
 
   afterAll(async () => {

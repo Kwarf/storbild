@@ -8,10 +8,7 @@ import { join } from "node:path";
 import { type Browser, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
 import { adminHeaders, TEST_PASSWORD, testConfig } from "../src/testing.ts";
-
-const enabled = process.env.STORBILD_E2E === "1";
-const TIMEOUT = 30_000;
-const screenshots = join(import.meta.dir, "screenshots");
+import { enabled, screenshots, shot, TIMEOUT } from "./helpers.ts";
 
 describe.skipIf(!enabled)("admin", () => {
   const dataDir = mkdtempSync(join(tmpdir(), "storbild-e2e-"));
@@ -41,16 +38,6 @@ describe.skipIf(!enabled)("admin", () => {
       config: { label },
     })) as string;
     return ids[label] as string;
-  };
-
-  const shot = async (page: Page, name: string) => {
-    for (const colorScheme of ["light", "dark"] as const) {
-      await page.emulateMedia({ colorScheme });
-      // Let colour transitions settle.
-      await Bun.sleep(300);
-      await page.screenshot({ path: join(screenshots, `${name}-${colorScheme}.png`) });
-    }
-    await page.emulateMedia({ colorScheme: "light" });
   };
 
   const mode = () => admin.locator("sb-strip .mode");

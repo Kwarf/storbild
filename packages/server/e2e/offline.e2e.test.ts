@@ -8,8 +8,8 @@ import { join } from "node:path";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
 import { adminHeaders, testConfig } from "../src/testing.ts";
+import { enabled } from "./helpers.ts";
 
-const enabled = process.env.STORBILD_E2E === "1";
 const TIMEOUT = 60_000;
 
 /** A bold woff2 from the admin's own font package. */

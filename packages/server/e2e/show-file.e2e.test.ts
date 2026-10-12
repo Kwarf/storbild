@@ -8,11 +8,10 @@ import { join } from "node:path";
 import type { ShowState } from "@storbild/core";
 import { type Browser, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
-import { adminHeaders, TEST_PASSWORD, testConfig } from "../src/testing.ts";
+import { adminHeaders, testConfig } from "../src/testing.ts";
+import { enabled, logIn, screenshots } from "./helpers.ts";
 
-const enabled = process.env.STORBILD_E2E === "1";
 const TIMEOUT = 60_000;
-const screenshots = join(import.meta.dir, "screenshots");
 
 /** A real 1×1 PNG. */
 const png = Uint8Array.fromBase64(
@@ -67,11 +66,7 @@ describe.skipIf(!enabled)("show files", () => {
       await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true })
     ).newPage();
     page.on("pageerror", (error) => console.error("page error:", error));
-    await page.goto(storbild.admin.url.href);
-    await page.getByLabel("Username").fill("admin");
-    await page.getByLabel("Password").fill(TEST_PASSWORD);
-    await page.getByRole("button", { name: "Log in" }).click();
-    await page.waitForURL((url) => url.pathname === "/live");
+    await logIn(page, storbild.admin.url);
     await page.getByRole("link", { name: "Settings" }).click();
     await page.getByRole("heading", { name: "Settings", level: 1 }).waitFor();
     return page;

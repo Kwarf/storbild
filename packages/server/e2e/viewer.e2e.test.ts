@@ -8,9 +8,7 @@ import type { ShowState } from "@storbild/core";
 import { type Browser, type BrowserContext, chromium, type Page } from "playwright";
 import { type Storbild, start } from "../src/main.ts";
 import { adminHeaders, testConfig } from "../src/testing.ts";
-
-const enabled = process.env.STORBILD_E2E === "1";
-const TIMEOUT = 30_000;
+import { enabled, TIMEOUT } from "./helpers.ts";
 
 interface Screen {
   context: BrowserContext;
