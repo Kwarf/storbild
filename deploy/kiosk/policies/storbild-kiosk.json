@@ -1,0 +1,12 @@
+{
+  "ComponentUpdatesEnabled": false,
+  "AutoplayAllowed": true,
+  "TranslateEnabled": false,
+  "PasswordManagerEnabled": false,
+  "SpellcheckEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+  "MetricsReportingEnabled": false,
+  "BackgroundModeEnabled": false,
+  "BrowserSignin": 0,
+  "DownloadRestrictions": 3
+}

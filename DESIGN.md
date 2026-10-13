@@ -471,7 +471,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - **Offline starts.** A service worker precaches the page, bundles and plugin modules, and caches the assets the show uses. The viewer keeps its last state and clock offset, and starts from them when the server doesn't answer, so a reload during an outage keeps playing. A small "Offline · last update …" pill shows when a screen has been out of touch for 10 s ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
-- **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled, under the `cage` Wayland compositor on Debian, Ubuntu or Raspberry Pi OS. Chromium updates are held. Scripts go in `deploy/kiosk/` ([ADR 0027](docs/decisions/0027-kiosk.md)).
+- **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled, under the `cage` Wayland compositor on Debian or Raspberry Pi OS. Chromium updates are held. Scripts go in `deploy/kiosk/` ([ADR 0027](docs/decisions/0027-kiosk.md)).
 
 ---
 

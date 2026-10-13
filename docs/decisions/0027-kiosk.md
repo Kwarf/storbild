@@ -20,8 +20,11 @@ the page, the SSE stream, `fetch` and the service worker.
 
 **Two platforms.**
 
-- **Debian or Ubuntu** on a mini PC is the primary target.
+- **Debian** 12 or 13 on a mini PC is the primary target. Ubuntu isn't supported, because its
+  Chromium is only a snap, which updates itself and is confined away from the compositor.
 - **Raspberry Pi OS Lite** (Pi 4 or 5) is a variant.
+
+One script, `deploy/kiosk/setup.sh`, sets up both, and detects which it runs on.
 
 **Session.** A dedicated user is logged in automatically, and a systemd unit runs `cage`, a
 Wayland kiosk compositor, with Chromium as its only client. There is no desktop environment.
