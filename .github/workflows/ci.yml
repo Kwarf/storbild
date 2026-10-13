@@ -27,3 +27,16 @@ jobs:
         run: bun test packages/server/e2e
         env:
           STORBILD_E2E: "1"
+
+  sdk-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - name: Build and pack the SDK, and check the plugin template against it
+        run: bun test packages/server/src/sdk-package.test.ts
+        env:
+          STORBILD_PACK: "1"

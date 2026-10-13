@@ -46,10 +46,14 @@ versioned separately from the server.
   as `<version>`, `<major>.<minor>` and `latest` (ADR 0023).
 
 **The template is in this repository**, at `templates/plugin/`, outside the Bun workspaces.
-It depends on the published SDK, and authors copy it.
+It depends on the published SDK, and authors copy it. It ships TypeScript
+sources, which the host bundles itself (ADR 0004), so it needs no build step; `buildPlugin` is
+there for authors who want to publish built ESM.
 
 **Pack test.** CI packs `dist/`, installs the tarball into a copy of the template, type checks
-and builds the template, and starts the host with it on `STORBILD_PLUGIN_PATHS`. This checks
+the template and runs its tests, and starts the host with it on `STORBILD_PLUGIN_PATHS`. It
+needs the network, so it only runs with `STORBILD_PACK=1`, and the root `bun test` skips
+`templates/`. This checks
 the published package and the template together on every change.
 
 ## Consequences

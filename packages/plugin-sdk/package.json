@@ -1,8 +1,21 @@
 {
   "name": "@storbild/plugin-sdk",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "Write plugins for Storbild, the big-screen software for demoparties",
   "private": false,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kwarf/storbild.git",
+    "directory": "packages/plugin-sdk"
+  },
+  "homepage": "https://github.com/Kwarf/storbild/blob/main/docs/plugin-authoring.md",
+  "keywords": [
+    "storbild",
+    "demoparty",
+    "plugin",
+    "lit"
+  ],
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
@@ -11,7 +24,8 @@
     "./build": "./src/build.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.test.json"
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc --noEmit -p . && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@storbild/core": "workspace:*"

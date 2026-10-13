@@ -1,0 +1,3 @@
+[test]
+# The plugin template has its own dependencies; the pack test runs it (ADR 0026).
+pathIgnorePatterns = ["templates/**"]
