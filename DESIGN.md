@@ -103,13 +103,15 @@ storbild/
 │   ├── countdown/
 │   ├── announcement/
 │   └── info/
+├── templates/
+│   └── plugin/                # starting point for third-party plugins (ADR 0026)
 └── deploy/
     ├── Caddyfile.example
     ├── storbild.service       # systemd unit
     ├── Containerfile          # Docker/Podman image
     ├── compose.yaml           # Storbild and Caddy, for docker or podman compose
     ├── storbild.container     # Podman Quadlet unit
-    └── kiosk/                 # Chromium kiosk launch scripts
+    └── kiosk/                 # Chromium kiosk setup and launch scripts (ADR 0027)
 ```
 
 **Rule:** built-in plugins may import only `@storbild/plugin-sdk` (and their own deps). If a built-in plugin needs something internal, that is a gap in the SDK. Fix the SDK, not the plugin.
@@ -434,7 +436,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 - Modules are served at `/plugins/<id>/<version>/…`, with version in the path, so caching is safe. The viewer dynamically `import()`s only the plugins used by the current state.
 - `apiVersion` is checked on load. An incompatible plugin gets `status: "incompatible"`, which is shown in the admin and never crashes the host.
 - Each instance type may export `migrate(fromVersion, config)`. The host migrates and then validates stored config on load.
-- **Dev mode.** `STORBILD_PLUGIN_PATHS=/path/to/my-plugin` loads a plugin from a local path and reloads it when the build output changes.
+- **Dev mode.** `STORBILD_PLUGIN_PATHS=/path/to/my-plugin` loads a plugin from a local path. With `STORBILD_PLUGIN_WATCH=1`, the host also reloads it when its files change. Module URLs carry a content hash, so a rebuilt module always gets a new URL ([ADR 0025](docs/decisions/0025-plugin-reload.md)).
 
 ### 6.4 Built-in plugins (planned)
 
@@ -469,7 +471,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
   - **Offline starts.** A service worker precaches the page, bundles and plugin modules, and caches the assets the show uses. The viewer keeps its last state and clock offset, and starts from them when the server doesn't answer, so a reload during an outage keeps playing. A small "Offline · last update …" pill shows when a screen has been out of touch for 10 s ([ADR 0019](docs/decisions/0019-resilience-and-show-files.md)).
 Sync client, bundling and failure handling are specified in [ADR 0005](docs/decisions/0005-viewer.md).
 
-- **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled. Scripts go in `deploy/kiosk/`.
+- **Kiosk.** Chromium launched with `--kiosk --noerrdialogs --disable-session-crashed-bubble --no-first-run --autoplay-policy=no-user-gesture-required --disable-pinch --overscroll-history-navigation=0 --disable-component-update`, with a dedicated profile and screen blanking disabled, under the `cage` Wayland compositor on Debian, Ubuntu or Raspberry Pi OS. Chromium updates are held. Scripts go in `deploy/kiosk/` ([ADR 0027](docs/decisions/0027-kiosk.md)).
 
 ---
 
@@ -575,7 +577,7 @@ Mechanics (pure reducer in core, diff-based patches, table layout, resume rules)
 
 **Done when:** a plugin in a separate directory outside the repo, depending only on the SDK, loads with full type checking. Its settings and instances validate. A server part can write plugin state and the resulting patch appears on `/events`.
 
-Package shape, bundling, module serving, state representation and failure handling are specified in [ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md). Reloading plugins from `STORBILD_PLUGIN_PATHS` on change is deferred to M10b.
+Package shape, bundling, module serving, state representation and failure handling are specified in [ADR 0004](docs/decisions/0004-plugin-sdk-and-host.md). Reloading plugins from `STORBILD_PLUGIN_PATHS` on change is deferred to M10b ([ADR 0025](docs/decisions/0025-plugin-reload.md)).
 
 ### M3 — Viewer
 
@@ -709,12 +711,12 @@ The service worker, the stored state, the offline indicator and show files are s
 **Depends on:** M10a.
 
 - **Deployment.** A systemd unit and an optional container image, published to GHCR as `ghcr.io/kwarf/storbild`, with a compose file and a Podman Quadlet unit. `docs/deployment.md` covers both ways of running the server, Caddy (two hosts, basic auth on screen), DNS, kiosk setup (`deploy/kiosk/`), and pinning or disabling Chromium updates.
-- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk` to npmjs, under the `storbild` npm organization. Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
+- **Plugin authoring.** `docs/plugin-authoring.md` and a plugin template in `templates/plugin/`. Publish `@storbild/plugin-sdk` to npmjs, under the `storbild` npm organization, from tagged releases. Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
 - **Soak test, last.** 24 h unattended on target-like hardware, set up from the docs, with a forced network outage and a server restart during the run.
 
 **Done when:** a fresh VPS and kiosk can be set up from the docs alone, once with systemd and once with containers, and the soak test passes.
 
-The package registries are specified in [ADR 0023](docs/decisions/0023-package-registries.md), and container deployment in [ADR 0024](docs/decisions/0024-container-deployment.md).
+The package registries are specified in [ADR 0023](docs/decisions/0023-package-registries.md), container deployment in [ADR 0024](docs/decisions/0024-container-deployment.md), plugin reload in [ADR 0025](docs/decisions/0025-plugin-reload.md), the SDK build, releases and the template in [ADR 0026](docs/decisions/0026-sdk-publishing-and-plugin-template.md), and the kiosk in [ADR 0027](docs/decisions/0027-kiosk.md).
 
 The split and the M10 items deferred by earlier ADRs are specified in [ADR 0016](docs/decisions/0016-split-m10.md).
 
