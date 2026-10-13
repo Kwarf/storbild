@@ -705,11 +705,13 @@ The service worker, the stored state, the offline indicator and show files are s
 
 **Depends on:** M10a.
 
-- **Deployment.** A systemd unit and an optional Docker image. `docs/deployment.md` covers Caddy (two hosts, basic auth on screen), DNS, kiosk setup (`deploy/kiosk/`), and pinning or disabling Chromium updates.
-- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk` (check the npm scope first, §11). Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
+- **Deployment.** A systemd unit and an optional Docker image, published to GHCR as `ghcr.io/kwarf/storbild`. `docs/deployment.md` covers Caddy (two hosts, basic auth on screen), DNS, kiosk setup (`deploy/kiosk/`), and pinning or disabling Chromium updates.
+- **Plugin authoring.** `docs/plugin-authoring.md` and a template repository for third-party plugins. Publish `@storbild/plugin-sdk` to npmjs, under the `storbild` npm organization. Dev-mode reload of `STORBILD_PLUGIN_PATHS` (§6.3).
 - **Soak test, last.** 24 h unattended on target-like hardware, set up from the docs, with a forced network outage and a server restart during the run.
 
 **Done when:** a fresh VPS and kiosk can be set up from the docs alone, and the soak test passes.
+
+The package registries are specified in [ADR 0023](docs/decisions/0023-package-registries.md).
 
 The split and the M10 items deferred by earlier ADRs are specified in [ADR 0016](docs/decisions/0016-split-m10.md).
 
@@ -728,4 +730,4 @@ The split and the M10 items deferred by earlier ADRs are specified in [ADR 0016]
 
 ## 11. Open questions
 
-- The npm scope `@storbild` and the GitHub org name need an availability check.
+None.
