@@ -75,6 +75,6 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
       # Trusted publishing needs npm 11.5.1 or later.
-      - run: npm install -g npm@^11.5.1
+      - run: npm install -g npm@12.2.0
       - run: npm publish --provenance --access public
         working-directory: packages/plugin-sdk/dist
