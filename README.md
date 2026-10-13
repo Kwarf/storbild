@@ -49,6 +49,8 @@ The screen and the admin are served on separate ports on purpose, so that the sc
 
 To look around with some content, `bun run demo --serve` starts a demo show instead (log in as `admin` / `correct horse`).
 
+To run it at a party, [docs/deployment.md](docs/deployment.md) covers the server (with systemd or containers), Caddy and the kiosk screens. To write your own scenes and overlays, start with [docs/plugin-authoring.md](docs/plugin-authoring.md) and the template in [templates/plugin/](templates/plugin/).
+
 ## Development
 
 [DESIGN.md](DESIGN.md) describes the architecture and the plan, and [docs/decisions/](docs/decisions/) holds the decisions made along the way. [AGENTS.md](AGENTS.md) lists the commands for tests, type checks and linting.
