@@ -1,8 +1,9 @@
 # Storbild behind Caddy: two hostnames, two ports, one process.
 # Set DOMAIN in Caddy's environment, e.g. DOMAIN=party.example.org.
 #
-# Storbild binds to 127.0.0.1 by default, so only Caddy can reach it. Don't add
-# `encode` to these sites: SSE streams must not be compressed (DESIGN.md §5.1).
+# Storbild binds to 127.0.0.1 by default, so only Caddy can reach it. In compose,
+# STORBILD_UPSTREAM is the Storbild container's name instead. Don't add `encode` to
+# these sites: SSE streams must not be compressed (DESIGN.md §5.1).
 
 # Viewer: the main screen and any mirrors. Protected by basic auth.
 screen.{$DOMAIN} {
@@ -10,7 +11,7 @@ screen.{$DOMAIN} {
 	basic_auth {
 		screen $2a$14$REPLACE_WITH_OUTPUT_OF_caddy_hash-password
 	}
-	reverse_proxy 127.0.0.1:3000 {
+	reverse_proxy {$STORBILD_UPSTREAM:127.0.0.1}:3000 {
 		flush_interval -1
 	}
 }
@@ -18,7 +19,7 @@ screen.{$DOMAIN} {
 # Admin: protected by Storbild's own login. Never proxy this host to :3000 or
 # the screen host to :3001.
 admin.{$DOMAIN} {
-	reverse_proxy 127.0.0.1:3001 {
+	reverse_proxy {$STORBILD_UPSTREAM:127.0.0.1}:3001 {
 		flush_interval -1
 	}
 }

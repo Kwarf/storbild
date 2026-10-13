@@ -1,0 +1,24 @@
+# The Storbild image (ADR 0024), for `docker build` and `podman build`. Build from the
+# repository root:
+#
+#   podman build -f deploy/Containerfile -t storbild .
+#
+# Keep BUN_VERSION in step with .bun-version; CI checks it.
+ARG BUN_VERSION=1.4.3
+FROM docker.io/oven/bun:${BUN_VERSION}-slim
+
+WORKDIR /app
+COPY . .
+RUN bun install --frozen-lockfile --production \
+  && mkdir -p /data \
+  && chown bun:bun /data
+
+# Published on loopback by the host, so only the reverse proxy reaches them.
+ENV STORBILD_HOST=0.0.0.0 \
+    STORBILD_DATA_DIR=/data
+VOLUME /data
+EXPOSE 3000 3001
+
+USER bun
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["bun", "deploy/healthcheck.ts"]
+CMD ["bun", "packages/server/src/main.ts"]

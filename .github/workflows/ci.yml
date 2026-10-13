@@ -40,3 +40,24 @@ jobs:
         run: bun test packages/server/src/sdk-package.test.ts
         env:
           STORBILD_PACK: "1"
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check the image's Bun version
+        run: grep -qx "ARG BUN_VERSION=$(cat .bun-version)" deploy/Containerfile
+      - name: Build the image
+        run: docker build -f deploy/Containerfile -t storbild:ci .
+      - name: Start it and wait until it is healthy
+        run: |
+          hash=$(docker run --rm storbild:ci bun -e 'console.log(await Bun.password.hash("ci"))')
+          docker run -d --name storbild -p 127.0.0.1:3000:3000 \
+            -e STORBILD_ADMIN_PASSWORD_HASH="$hash" storbild:ci
+          for _ in $(seq 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' storbild)
+            [ "$status" = healthy ] && curl -fsS http://127.0.0.1:3000/time && exit 0
+            sleep 2
+          done
+          docker logs storbild
+          exit 1

@@ -1,0 +1,41 @@
+# Storbild and Caddy, for `docker compose` or `podman compose` (ADR 0024). See
+# docs/deployment.md. Next to this file you need:
+#   - storbild.env: STORBILD_ADMIN_PASSWORD_HASH (in single quotes), STORBILD_VIEWER_URL and
+#     STORBILD_ADMIN_URL
+#   - Caddyfile: a copy of Caddyfile.example with the screen password hash filled in
+# and DOMAIN set in the environment or in a .env file, for example DOMAIN=party.example.org.
+
+name: storbild
+
+services:
+  storbild:
+    image: ghcr.io/kwarf/storbild:latest
+    env_file: storbild.env
+    volumes:
+      - storbild-data:/data
+      # External plugins, each in its own directory; list them in STORBILD_PLUGIN_PATHS.
+      # - ./plugins:/plugins:ro
+    restart: unless-stopped
+    # Not published: only Caddy reaches it, over the compose network.
+
+  caddy:
+    image: docker.io/library/caddy:2
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN to the party's domain}
+      STORBILD_UPSTREAM: storbild
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - storbild
+    restart: unless-stopped
+
+volumes:
+  storbild-data:
+  caddy-data:
+  caddy-config:

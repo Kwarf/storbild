@@ -1,0 +1,35 @@
+# Storbild as a rootless Podman Quadlet unit (ADR 0024), mirroring storbild.service. Copy it to
+# ~/.config/containers/systemd/, put the configuration in ~/.config/storbild/storbild.env, then:
+#
+#   systemctl --user daemon-reload
+#   systemctl --user start storbild
+#
+# See docs/deployment.md. Upgrades are deliberate: pull a new tag and restart.
+
+[Unit]
+Description=Storbild big-screen server
+Documentation=https://github.com/Kwarf/storbild/blob/main/docs/deployment.md
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=storbild
+Image=ghcr.io/kwarf/storbild:latest
+EnvironmentFile=%h/.config/storbild/storbild.env
+Volume=storbild-data:/data
+# External plugins, each in its own directory; list them in STORBILD_PLUGIN_PATHS.
+# Volume=%h/storbild-plugins:/plugins:ro,Z
+# Loopback only: Caddy on the host proxies to these.
+PublishPort=127.0.0.1:3000:3000
+PublishPort=127.0.0.1:3001:3001
+HealthCmd=bun deploy/healthcheck.ts
+HealthInterval=30s
+HealthStartPeriod=20s
+StopTimeout=15
+
+[Service]
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

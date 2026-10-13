@@ -1,0 +1,12 @@
+# The image build context (deploy/Containerfile). Podman reads this file too.
+.git
+.github
+.devcontainer
+**/node_modules
+data
+.env
+.env.*
+coverage
+**/dist
+docs/screenshots
+packages/server/e2e/screenshots

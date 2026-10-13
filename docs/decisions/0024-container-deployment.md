@@ -4,7 +4,8 @@ Date: 2026-10-13
 
 ## Status
 
-Accepted. Refines M10b's deployment item (ADR 0016).
+Accepted. Refines M10b's deployment item (ADR 0016). Amended while implementing M10b: plugin
+paths, compose ports and the health check (marked below).
 
 ## Context
 
@@ -22,11 +23,18 @@ runs as a non-root user. Inside the container:
 - `STORBILD_HOST=0.0.0.0`, so the published ports reach the apps. The host publishes them on
   loopback, so only Caddy can reach them.
 - `STORBILD_DATA_DIR=/data`, a volume holding the database and the assets.
-- `STORBILD_PLUGIN_PATHS=/plugins`, an optional mount for external plugins.
-- The health check requests `/time` on the viewer port.
+- External plugins are mounted under `/plugins`, one directory each, and listed in
+  `STORBILD_PLUGIN_PATHS` (for example `/plugins/hello`). *Amended:* the image doesn't set
+  `STORBILD_PLUGIN_PATHS=/plugins`. Each path is one plugin directory, so without a mount the
+  host would report a broken plugin named `plugins`.
+- The health check requests `/time` on the viewer port. *Amended:* it is a small script in the
+  image, `deploy/healthcheck.ts`, because the image has no curl, and the Quadlet unit runs the
+  same script.
 
 **Compose.** `deploy/compose.yaml` runs Storbild with a named volume for `/data` and Caddy next
-to it, using `Caddyfile.example`. It works with both `docker compose` and `podman compose`.
+to it, using `Caddyfile.example`. *Amended:* Storbild's ports aren't published at all in
+compose. Caddy reaches it over the compose network, and the Caddyfile's upstream host comes
+from `STORBILD_UPSTREAM`, which defaults to `127.0.0.1`. It works with both `docker compose` and `podman compose`.
 
 **Quadlet.** `deploy/storbild.container` is a Podman Quadlet file, so Podman can run the
 container rootless under systemd without compose. It mirrors `storbild.service`.

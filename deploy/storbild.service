@@ -1,0 +1,52 @@
+# Storbild as a systemd service (docs/deployment.md). Expects:
+#   - Bun at /usr/local/bin/bun, at the version in .bun-version
+#   - a checkout of a release tag in /opt/storbild, with `bun install --production` run in it
+#   - a `storbild` system user, and the configuration in /etc/storbild/storbild.env
+# The database and uploaded assets go to /var/lib/storbild.
+
+[Unit]
+Description=Storbild big-screen server
+Documentation=https://github.com/Kwarf/storbild/blob/main/docs/deployment.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=storbild
+Group=storbild
+WorkingDirectory=/opt/storbild
+Environment=STORBILD_DATA_DIR=/var/lib/storbild
+Environment=XDG_CACHE_HOME=/var/cache/storbild
+EnvironmentFile=/etc/storbild/storbild.env
+ExecStart=/usr/local/bin/bun packages/server/src/main.ts
+# The server closes its streams on SIGTERM; screens reconnect and resume.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+Restart=always
+RestartSec=2
+
+StateDirectory=storbild
+StateDirectoryMode=0750
+CacheDirectory=storbild
+
+# Hardening. Plugin directories must be readable outside /home (ProtectHome).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+RestrictNamespaces=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
