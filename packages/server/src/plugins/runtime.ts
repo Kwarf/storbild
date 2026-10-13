@@ -49,16 +49,38 @@ export class PluginRuntime {
     this.#hub = hub;
     this.#baseMs = restart.baseMs ?? 1_000;
     this.#maxMs = restart.maxMs ?? 60_000;
-    for (const { plugin, definition } of modules) {
-      if (plugin.status !== "ok" || !definition) continue;
-      this.#plugins.set(plugin.id, {
-        id: plugin.id,
-        definition,
-        settingsListeners: new Set(),
-        instancesListeners: new Set(),
-        failures: 0,
-      });
+    for (const module of modules) this.#add(module);
+  }
+
+  #add({ plugin, definition }: PluginModule): Running | undefined {
+    if (plugin.status !== "ok" || !definition) return undefined;
+    const running: Running = {
+      id: plugin.id,
+      definition,
+      settingsListeners: new Set(),
+      instancesListeners: new Set(),
+      failures: 0,
+    };
+    this.#plugins.set(plugin.id, running);
+    return running;
+  }
+
+  /**
+   * Stops plugin `id`'s server part, if it runs, and starts `module`'s instead, if it is
+   * usable. Used when a plugin is reloaded (ADR 0025).
+   */
+  replace(id: string, module: PluginModule | undefined) {
+    const old = this.#plugins.get(id);
+    if (old) {
+      clearTimeout(old.restart);
+      this.#halt(old);
+      this.#plugins.delete(id);
     }
+    const running = module && this.#add(module);
+    if (!running || this.#stopped || !this.#unwatch) return;
+    running.lastSettings = JSON.stringify(this.#settingsOf(running.id));
+    running.lastInstances = JSON.stringify(this.#instancesOf(running.id));
+    this.#check(running);
   }
 
   start() {

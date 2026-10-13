@@ -15,8 +15,11 @@ export interface ViewerAppDeps {
   viewer?: ViewerBundle;
   /** Uploaded files, served at `/assets/<id>`. */
   assets?: AssetStore;
-  /** The service worker script, served at `/sw.js` with the page (ADR 0019). */
-  serviceWorker?: string;
+  /**
+   * The service worker script, served at `/sw.js` with the page (ADR 0019). A function is
+   * called per request, because a plugin reload changes the manifest (ADR 0025).
+   */
+  serviceWorker?: string | (() => string);
 }
 
 /**

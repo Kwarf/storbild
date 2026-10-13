@@ -152,22 +152,26 @@ async function eventually(check: () => void, timeoutMs = 2000) {
 
 const plugin = (id: string) => storbild.hub.state.plugins[id];
 
+/** Matches a plugin module URL, which carries a content hash (ADR 0025). */
+const moduleUrl = (id: string, version: string, name: string) =>
+  new RegExp(`^/plugins/${id}/${version}/[0-9a-f]{12}/${name}\\.js$`);
+
 describe("plugin host", () => {
   test("loads built-in and external plugins", () => {
     expect(plugin("markdown")).toMatchObject({
       status: "ok",
       version: "0.6.0",
-      module: "/plugins/markdown/0.6.0/viewer.js",
       settings: { fontScale: 1 },
       types: { text: { kind: "scene", label: "Markdown text", viewer: "sb-markdown-scene" } },
     });
+    expect(plugin("markdown")?.module).toMatch(moduleUrl("markdown", "0.6.0", "viewer"));
     expect(plugin("external")).toMatchObject({
       status: "ok",
       version: "1.2.3",
-      module: "/plugins/external/1.2.3/viewer.js",
       settings: { greeting: "hello" },
       state: { greeting: "hello", banners: [] },
     });
+    expect(plugin("external")?.module).toMatch(moduleUrl("external", "1.2.3", "viewer"));
   });
 
   test.each([
@@ -359,7 +363,6 @@ describe("external plugin (M2 acceptance)", () => {
   test("built-in countdown and info Wi-Fi load and validate their config", async () => {
     expect(plugin("countdown")).toMatchObject({
       status: "ok",
-      module: "/plugins/countdown/0.1.0/viewer.js",
       types: {
         countdown: { kind: "scene", viewer: "sb-countdown-scene" },
         widget: { kind: "overlay", viewer: "sb-countdown-widget" },
@@ -367,9 +370,10 @@ describe("external plugin (M2 acceptance)", () => {
     });
     expect(plugin("info")).toMatchObject({
       status: "ok",
-      adminModule: "/plugins/info/0.2.0/admin.js",
       types: { wifi: { kind: "overlay", viewer: "sb-info-wifi", editor: "sb-info-wifi-editor" } },
     });
+    expect(plugin("countdown")?.module).toMatch(moduleUrl("countdown", "0.1.0", "viewer"));
+    expect(plugin("info")?.adminModule).toMatch(moduleUrl("info", "0.2.0", "admin"));
 
     const create = (plugin: string, type: string, config: unknown) =>
       command("instance.create", { plugin, type, name: `${plugin}/${type}`, config });
@@ -531,7 +535,7 @@ describe("schemas", () => {
 describe("modules", () => {
   test("serve each plugin's viewer module with host modules left external", async () => {
     for (const app of [storbild.viewer, storbild.admin]) {
-      const res = await fetch(new URL("/plugins/markdown/0.6.0/viewer.js", app.url));
+      const res = await fetch(new URL(`${plugin("markdown")?.module}`, app.url));
       expect(res.status).toBe(200);
       expect(res.headers.get("Content-Type")).toContain("text/javascript");
       expect(res.headers.get("Cache-Control")).toContain("immutable");
@@ -542,17 +546,23 @@ describe("modules", () => {
     }
     // Plugins' own dependencies are bundled in; only the host modules stay external.
     const markdown = await (
-      await fetch(new URL("/plugins/markdown/0.6.0/viewer.js", storbild.viewer.url))
+      await fetch(new URL(`${plugin("markdown")?.module}`, storbild.viewer.url))
     ).text();
     expect(markdown).not.toMatch(/from\s*"(marked|dompurify)"/);
-    const editor = await fetch(new URL("/plugins/info/0.2.0/admin.js", storbild.admin.url));
+    const editor = await fetch(new URL(`${plugin("info")?.adminModule}`, storbild.admin.url));
     expect(editor.status).toBe(200);
     const editorCode = await editor.text();
     expect(/import\s*"@storbild\/plugin-sdk\/admin"/.test(editorCode)).toBe(true);
     expect(editorCode.includes('customElements.define("sb-info-wifi-editor"')).toBe(true);
-    const external = await fetch(new URL("/plugins/external/1.2.3/viewer.js", storbild.viewer.url));
+    const external = await fetch(new URL(`${plugin("external")?.module}`, storbild.viewer.url));
     expect(external.status).toBe(200);
-    for (const path of ["/plugins/markdown/9.9.9/viewer.js", "/plugins/nope/1.0.0/viewer.js"]) {
+    const hash = plugin("markdown")?.module?.split("/")[4];
+    for (const path of [
+      `/plugins/markdown/9.9.9/${hash}/viewer.js`,
+      "/plugins/markdown/0.6.0/000000000000/viewer.js",
+      "/plugins/markdown/0.6.0/viewer.js",
+      `/plugins/nope/1.0.0/${hash}/viewer.js`,
+    ]) {
       expect((await fetch(new URL(path, storbild.viewer.url))).status).toBe(404);
     }
   });

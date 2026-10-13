@@ -3,10 +3,12 @@ import type { PluginCatalog } from "@storbild/core";
 import { getVendor } from "./bundle.ts";
 import { discoverPlugins, type Log, loadPlugins, type PluginModule } from "./load.ts";
 import { createModuleRegistry, type ModuleRegistry } from "./routes.ts";
+import { catalogOf } from "./watch.ts";
 
 export { builtinPluginsDir } from "./load.ts";
 export { createModuleRoutes, type ModuleRegistry } from "./routes.ts";
 export { PluginRuntime, type RestartOptions } from "./runtime.ts";
+export { PluginReloader, watchPluginDirs } from "./watch.ts";
 
 export interface LoadedPlugins {
   modules: Map<string, PluginModule>;
@@ -23,7 +25,7 @@ export async function loadAllPlugins(options: {
 }): Promise<LoadedPlugins> {
   const dirs = discoverPlugins(options.builtinDir, options.paths);
   const modules = await loadPlugins(dirs, join(options.dataDir, "cache", "plugins"), options.log);
-  const catalog = Object.fromEntries([...modules].map(([id, { plugin }]) => [id, plugin]));
+  const catalog = catalogOf(modules);
   const registry = createModuleRegistry(await getVendor(), modules.values());
   return { modules, catalog, registry };
 }

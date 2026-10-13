@@ -49,6 +49,18 @@ function storedTheme(): ColorScheme {
   }
 }
 
+/** What the plugins' schemas depend on: each plugin's version, modules and status. */
+const pluginsKey = (state: ShowState) =>
+  JSON.stringify(
+    Object.entries(state.plugins).map(([id, p]) => [
+      id,
+      p.version,
+      p.module,
+      p.adminModule,
+      p.status,
+    ]),
+  );
+
 const sectionAt = (path: string): Section | undefined =>
   sections.find((section) => section.path === path);
 
@@ -153,8 +165,13 @@ export class Admin extends LitElement {
   declare connected: boolean;
   declare path: string;
   declare theme: ColorScheme;
-  /** The plugins' JSON Schemas for generated forms; reloaded on every (re)connect. */
+  /**
+   * The plugins' JSON Schemas for generated forms; reloaded on every (re)connect and when a
+   * plugin is reloaded (ADR 0025).
+   */
   declare schemas: Schemas | undefined;
+  /** The plugins' versions, modules and statuses the schemas were loaded for. */
+  #pluginsKey: string | undefined;
 
   readonly clock = new ClockSync({ url: "/api/time", fetch: fetchApi, localNow, timers });
   readonly sync = new SyncClient({
@@ -182,19 +199,26 @@ export class Admin extends LitElement {
       else {
         this.state = state;
         this.assets.update(state);
+        const key = pluginsKey(state);
+        if (this.#pluginsKey !== undefined && key !== this.#pluginsKey) this.#loadSchemas();
+        this.#pluginsKey = key;
       }
     },
     onConnect: () => {
       void this.clock.sync();
       // The server may have restarted with other plugins.
-      fetchSchemas().then(
-        (schemas) => {
-          this.schemas = schemas;
-        },
-        (error: unknown) => console.error(error),
-      );
+      this.#loadSchemas();
     },
   });
+
+  #loadSchemas() {
+    fetchSchemas().then(
+      (schemas) => {
+        this.schemas = schemas;
+      },
+      (error: unknown) => console.error(error),
+    );
+  }
   /** Offered to every asset picker on the page, including those in custom editors. */
   readonly assets = new StateAssetSource();
   readonly ctx: ViewerContext = {

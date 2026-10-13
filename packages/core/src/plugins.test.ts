@@ -98,4 +98,28 @@ describe("reconcilePlugins", () => {
     // A broken instance keeps its stored config, so fixing the plugin restores it.
     expect(state.instances.invalid?.config).toEqual({ content: 1 });
   });
+
+  test("with only some plugins, leaves the others' entries and instances alone", () => {
+    const failed = { status: "error" as const, error: "server part failed", settings: {} };
+    const state = reconcilePlugins(
+      stateWith({
+        plugins: {
+          markdown: { status: "ok", version: "0.9.0", settings: {}, state: null, types: {} },
+          legacy: { ...failed, state: null, types: {} },
+          gone: { status: "ok", settings: {}, state: 1, types: {} },
+        },
+        instances: {
+          text: { ...instance("text", "markdown", "text", { content: "x" }), error: "stale" },
+          old: { ...instance("old", "legacy", "text", {}), error: "kept" },
+        },
+      }),
+      testCatalog,
+      ["markdown", "gone"],
+    );
+    expect(state.plugins.markdown).toMatchObject({ status: "ok", version: "1.0.0" });
+    expect(state.plugins.legacy).toEqual({ ...failed, state: null, types: {} });
+    expect(state.plugins.gone?.status).toBe("missing");
+    expect(state.instances.text?.error).toBeUndefined();
+    expect(state.instances.old?.error).toBe("kept");
+  });
 });

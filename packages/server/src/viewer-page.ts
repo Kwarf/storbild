@@ -38,8 +38,8 @@ export function precacheUrls(bundle: ViewerBundle, registry: ModuleRegistry | un
   if (registry) {
     const { vendor, plugins } = registry;
     urls.push(...[...vendor.files.keys()].map((path) => `/vendor/${vendor.hash}/${path}`));
-    for (const [id, { version, files }] of plugins) {
-      urls.push(...[...files.keys()].map((path) => `/plugins/${id}/${version}/${path}`));
+    for (const [id, { version, hash, files }] of plugins) {
+      urls.push(...[...files.keys()].map((path) => `/plugins/${id}/${version}/${hash}/${path}`));
     }
   }
   return urls.map((url) => url.split("/").map(encodeURIComponent).join("/"));
@@ -86,7 +86,7 @@ sb-viewer { display: block; width: 100%; height: 100%; }
 export function createViewerPageRoutes(
   bundle: ViewerBundle,
   importMap: unknown,
-  serviceWorker?: string,
+  serviceWorker?: string | (() => string),
 ) {
   const html = page(bundle, importMap);
   const app = new Hono()
@@ -98,7 +98,7 @@ export function createViewerPageRoutes(
   if (serviceWorker !== undefined) {
     // Revalidated on every check, so a new server's worker is picked up at once.
     app.get("/sw.js", (c) =>
-      c.body(serviceWorker, 200, {
+      c.body(typeof serviceWorker === "string" ? serviceWorker : serviceWorker(), 200, {
         "Content-Type": "text/javascript; charset=utf-8",
         "Cache-Control": "no-cache",
       }),

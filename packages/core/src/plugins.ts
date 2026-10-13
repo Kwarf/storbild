@@ -135,40 +135,58 @@ function typeInfo(type: LoadedType): PluginTypeInfo {
   return info;
 }
 
+/** A loaded plugin's entry in state, keeping its stored settings and state. */
+function pluginEntry(
+  catalog: PluginCatalog,
+  plugin: LoadedPlugin,
+  stored: PluginEntry | undefined,
+): PluginEntry {
+  const settings = stored?.settings ?? {};
+  // Invalid settings are kept as they are; the plugin runtime reports them.
+  const normalized = normalizeSettings(catalog, plugin.id, settings);
+  return {
+    status: plugin.status,
+    ...(plugin.version !== undefined && { version: plugin.version }),
+    ...(plugin.error !== undefined && { error: plugin.error }),
+    ...(plugin.module !== undefined && { module: plugin.module }),
+    ...(plugin.adminModule !== undefined && { adminModule: plugin.adminModule }),
+    settings: normalized.ok ? normalized.value : settings,
+    state: stored?.state ?? null,
+    types: Object.fromEntries(
+      Object.entries(plugin.types ?? {}).map(([name, type]) => [name, typeInfo(type)]),
+    ),
+  };
+}
+
 /**
  * Brings the state in line with the plugins the host loaded: plugin entries get their status,
  * version, module and types, settings get their defaults, and every instance is migrated or
  * marked broken. Plugins that are no longer installed keep their data with status `missing`.
+ *
+ * With `only`, just those plugins and their instances are brought in line, and every other
+ * entry is kept as it is, including a status the plugin runtime set (ADR 0025).
  */
-export function reconcilePlugins(state: ShowState, catalog: PluginCatalog): ShowState {
+export function reconcilePlugins(
+  state: ShowState,
+  catalog: PluginCatalog,
+  only?: Iterable<string>,
+): ShowState {
+  const ids = only === undefined ? undefined : new Set(only);
   const plugins: Record<string, PluginEntry> = {};
   for (const [id, entry] of Object.entries(state.plugins)) {
-    if (!catalog[id]) {
+    if (ids && !ids.has(id)) plugins[id] = entry;
+    else if (!catalog[id]) {
       plugins[id] = { status: "missing", settings: entry.settings, state: entry.state, types: {} };
     }
   }
   for (const plugin of Object.values(catalog)) {
-    const stored = state.plugins[plugin.id];
-    const settings = stored?.settings ?? {};
-    // Invalid settings are kept as they are; the plugin runtime reports them.
-    const normalized = normalizeSettings(catalog, plugin.id, settings);
-    plugins[plugin.id] = {
-      status: plugin.status,
-      ...(plugin.version !== undefined && { version: plugin.version }),
-      ...(plugin.error !== undefined && { error: plugin.error }),
-      ...(plugin.module !== undefined && { module: plugin.module }),
-      ...(plugin.adminModule !== undefined && { adminModule: plugin.adminModule }),
-      settings: normalized.ok ? normalized.value : settings,
-      state: stored?.state ?? null,
-      types: Object.fromEntries(
-        Object.entries(plugin.types ?? {}).map(([name, type]) => [name, typeInfo(type)]),
-      ),
-    };
+    if (ids && !ids.has(plugin.id)) continue;
+    plugins[plugin.id] = pluginEntry(catalog, plugin, state.plugins[plugin.id]);
   }
   const instances = Object.fromEntries(
     Object.entries(state.instances).map(([id, instance]) => [
       id,
-      reconcileInstance(catalog, instance),
+      ids && !ids.has(instance.plugin) ? instance : reconcileInstance(catalog, instance),
     ]),
   );
   return { ...state, plugins, instances };

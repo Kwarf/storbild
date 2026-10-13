@@ -62,7 +62,7 @@ export class StateHub {
   readonly #db: Database;
   readonly #now: () => number;
   readonly #newId: () => string;
-  readonly #catalog: PluginCatalog;
+  #catalog: PluginCatalog;
   readonly #bufferSize: number;
   readonly #buffer: PatchEvent[] = [];
   /** Streams that have seen this revision or later can resume from the buffer. */
@@ -82,6 +82,14 @@ export class StateHub {
 
   get state(): ShowState {
     return this.#state;
+  }
+
+  /**
+   * Replaces the loaded plugins after a reload (ADR 0025). The caller brings the state in line
+   * with `update` and `reconcilePlugins`.
+   */
+  setCatalog(catalog: PluginCatalog) {
+    this.#catalog = catalog;
   }
 
   /** Open streams, viewer and admin. */

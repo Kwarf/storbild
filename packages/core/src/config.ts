@@ -13,6 +13,7 @@ const envSchema = z
       .string({ error: "is required; generate one with `bun run hash-password`" })
       .startsWith("$argon2id$", "must be an argon2id hash ($argon2id$...)"),
     STORBILD_PLUGIN_PATHS: z.string().default(""),
+    STORBILD_PLUGIN_WATCH: z.stringbool().default(false),
     STORBILD_MAX_UPLOAD_MB: z.coerce.number().positive().max(1024).default(25),
     STORBILD_MAX_VIDEO_UPLOAD_MB: z.coerce.number().positive().max(4096).default(200),
     STORBILD_MAX_IMPORT_MB: z.coerce.number().positive().max(65536).default(4096),
@@ -33,6 +34,8 @@ export interface Config {
   admin: { port: number; publicUrl: string; username: string; passwordHash: string };
   dataDir: string;
   pluginPaths: string[];
+  /** Reload plugins from `pluginPaths` when their files change (ADR 0025). */
+  watchPlugins: boolean;
   /** The largest asset upload, in bytes. */
   maxUploadBytes: number;
   /** The largest video upload, in bytes. */
@@ -75,6 +78,7 @@ export function parseConfig(env: Record<string, string | undefined>, pathDelimit
     pluginPaths: e.STORBILD_PLUGIN_PATHS.split(pathDelimiter)
       .map((p) => p.trim())
       .filter((p) => p !== ""),
+    watchPlugins: e.STORBILD_PLUGIN_WATCH,
     maxUploadBytes: Math.floor(e.STORBILD_MAX_UPLOAD_MB * 1024 * 1024),
     maxVideoUploadBytes: Math.floor(e.STORBILD_MAX_VIDEO_UPLOAD_MB * 1024 * 1024),
     maxImportBytes: Math.floor(e.STORBILD_MAX_IMPORT_MB * 1024 * 1024),

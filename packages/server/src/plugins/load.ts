@@ -25,10 +25,17 @@ export interface PluginSchemas {
 
 /** A plugin as loaded: its catalog entry, and its code when it is usable. */
 export interface PluginModule {
+  /** The directory it was loaded from. */
+  dir: string;
   plugin: LoadedPlugin;
   definition?: PluginDefinitionShape;
-  /** The bundled browser modules (`viewer.js`, `admin.js`), served at `/plugins/<id>/<version>/`. */
+  /**
+   * The bundled browser modules (`viewer.js`, `admin.js`), served at
+   * `/plugins/<id>/<version>/<hash>/` (ADR 0025).
+   */
   files?: ModuleFiles;
+  /** A content hash of `files`, so a rebuilt module gets a new URL. */
+  hash?: string;
   schemas?: PluginSchemas;
 }
 
@@ -80,6 +87,19 @@ function toJsonSchema(schema: z.ZodType, what: string): JsonSchema {
   }
 }
 
+/** A short hash of every file's path and content. */
+async function hashFiles(files: ModuleFiles): Promise<string> {
+  const hasher = new Bun.CryptoHasher("sha256");
+  for (const [path, file] of [...files].sort(([a], [b]) => a.localeCompare(b))) {
+    hasher
+      .update(path)
+      .update("\0")
+      .update(await file.body.arrayBuffer())
+      .update("\0");
+  }
+  return hasher.digest("hex").slice(0, 12);
+}
+
 /**
  * Loads one plugin directory. Never throws: a plugin that cannot be loaded comes back with
  * status `incompatible` or `error`, keyed by its declared ID or else the directory name.
@@ -92,6 +112,7 @@ export async function loadPlugin(
   let id = basename(dir);
   let version: string | undefined;
   const failed = (status: "incompatible" | "error", error: string): PluginModule => ({
+    dir,
     plugin: { id, status, error, ...(version !== undefined && { version }) },
   });
 
@@ -153,11 +174,13 @@ export async function loadPlugin(
     return failed("error", errorMessage(error));
   }
 
+  const hash = await hashFiles(files);
   const url = (name: string) =>
-    files.has(`${name}.js`) ? `/plugins/${id}/${version}/${name}.js` : undefined;
+    files.has(`${name}.js`) ? `/plugins/${id}/${version}/${hash}/${name}.js` : undefined;
   const module = url("viewer");
   const adminModule = url("admin");
   return {
+    dir,
     plugin: {
       id,
       version,
@@ -169,7 +192,7 @@ export async function loadPlugin(
     },
     definition: def,
     schemas,
-    ...(files.size > 0 && { files }),
+    ...(files.size > 0 && { files, hash }),
   };
 }
 

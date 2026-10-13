@@ -11,8 +11,10 @@ import {
   builtinPluginsDir,
   loadAllPlugins,
   type ModuleRegistry,
+  PluginReloader,
   PluginRuntime,
   type RestartOptions,
+  watchPluginDirs,
 } from "./plugins/index.ts";
 import { Scheduler, type SchedulerTimers } from "./scheduler.ts";
 import { ShowFiles } from "./show-file.ts";
@@ -51,6 +53,8 @@ export interface StartOptions {
   pluginRestart?: RestartOptions;
   /** Timers for the scheduler, to drive time in tests. */
   timers?: SchedulerTimers;
+  /** How long plugin files must be quiet before a reload, with `watchPlugins`. */
+  pluginWatchDebounceMs?: number;
 }
 
 /**
@@ -104,6 +108,34 @@ export async function start(config: Config, options: StartOptions = {}): Promise
   ]);
   const plugins = new PluginRuntime(hub, modules.values(), options.pluginRestart);
   plugins.start();
+  const schemas = Object.fromEntries(
+    [...modules].flatMap(([id, { schemas }]) => (schemas ? [[id, schemas]] : [])),
+  );
+  const buildServiceWorker = () =>
+    serviceWorkerScript(serviceWorkerCode, precacheUrls(viewerBundle, registry));
+  let serviceWorker = buildServiceWorker();
+  let unwatch: (() => void) | undefined;
+  if (config.watchPlugins && config.pluginPaths.length > 0) {
+    const reloader = new PluginReloader({
+      hub,
+      runtime: plugins,
+      modules,
+      registry,
+      schemas,
+      dataDir: config.dataDir,
+      onReload: () => {
+        serviceWorker = buildServiceWorker();
+      },
+    });
+    unwatch = watchPluginDirs(
+      config.pluginPaths,
+      (dir) => void reloader.reload(dir),
+      options.pluginWatchDebounceMs === undefined
+        ? {}
+        : { debounceMs: options.pluginWatchDebounceMs },
+    );
+    console.log(`watching ${config.pluginPaths.length} plugin path(s) for changes`);
+  }
 
   // Bun closes connections idle for 10 s by default, which would cut SSE streams between
   // 15 s heartbeats.
@@ -118,7 +150,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       modules: registry,
       viewer: viewerBundle,
       assets,
-      serviceWorker: serviceWorkerScript(serviceWorkerCode, precacheUrls(viewerBundle, registry)),
+      serviceWorker: () => serviceWorker,
       ...(stream && { stream }),
     }).fetch,
   });
@@ -144,9 +176,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
       modules: registry,
       bundle: adminBundle,
       plugins,
-      schemas: Object.fromEntries(
-        [...modules].flatMap(([id, { schemas }]) => (schemas ? [[id, schemas]] : [])),
-      ),
+      schemas,
       assets,
       maxUploadBytes: config.maxUploadBytes,
       maxVideoUploadBytes: config.maxVideoUploadBytes,
@@ -163,6 +193,7 @@ export async function start(config: Config, options: StartOptions = {}): Promise
     plugins,
     modules: registry,
     async stop() {
+      unwatch?.();
       scheduler.stop();
       plugins.stop();
       assets.stop();

@@ -29,6 +29,7 @@ describe("parseConfig", () => {
       },
       dataDir: "./data",
       pluginPaths: [],
+      watchPlugins: false,
       maxUploadBytes: 25 * 1024 * 1024,
       maxVideoUploadBytes: 200 * 1024 * 1024,
       maxImportBytes: 4096 * 1024 * 1024,
@@ -44,6 +45,7 @@ describe("parseConfig", () => {
       STORBILD_ADMIN_USERNAME: "crew",
       STORBILD_ADMIN_PASSWORD_HASH: HASH,
       STORBILD_PLUGIN_PATHS: "/a:/b",
+      STORBILD_PLUGIN_WATCH: "1",
       STORBILD_MAX_UPLOAD_MB: "0.5",
       STORBILD_MAX_VIDEO_UPLOAD_MB: "1000",
       STORBILD_MAX_IMPORT_MB: "8000",
@@ -61,6 +63,7 @@ describe("parseConfig", () => {
       },
       dataDir: "/var/lib/storbild",
       pluginPaths: ["/a", "/b"],
+      watchPlugins: true,
       maxUploadBytes: 512 * 1024,
       maxVideoUploadBytes: 1000 * 1024 * 1024,
       maxImportBytes: 8000 * 1024 * 1024,
@@ -70,6 +73,12 @@ describe("parseConfig", () => {
   test("ignores unrelated variables and treats empty values as unset", () => {
     const config = parseConfig({ ...base, PATH: "/usr/bin", STORBILD_VIEWER_PORT: "" });
     expect(config.viewer.port).toBe(3000);
+  });
+
+  test("rejects a plugin watch flag that is not a boolean", () => {
+    expect(() => parseConfig({ ...base, STORBILD_PLUGIN_WATCH: "maybe" })).toThrow(
+      "STORBILD_PLUGIN_WATCH",
+    );
   });
 
   test("splits plugin paths on the given delimiter and drops empty entries", () => {

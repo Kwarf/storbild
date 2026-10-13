@@ -30,7 +30,9 @@ describe("viewer app", () => {
   const file = { body: new Blob(["//"]), type: "text/javascript" };
   const modules = {
     vendor: { hash: "abc", files: new Map([["lit/index.js", file]]), specifiers: {} },
-    plugins: new Map([["markdown", { version: "1.2.0", files: new Map([["viewer.js", file]]) }]]),
+    plugins: new Map([
+      ["markdown", { version: "1.2.0", hash: "f00", files: new Map([["viewer.js", file]]) }],
+    ]),
     importMap,
   };
   const serviceWorker = serviceWorkerScript(serviceWorkerCode, precacheUrls(viewer, modules));
@@ -56,7 +58,7 @@ describe("viewer app", () => {
       "/",
       ...[...viewer.files.keys()].map((path) => `/app/${viewer.hash}/${path}`),
       "/vendor/abc/lit/index.js",
-      "/plugins/markdown/1.2.0/viewer.js",
+      "/plugins/markdown/1.2.0/f00/viewer.js",
     ]);
     // A classic script, which every browser registers.
     expect(code).not.toMatch(/^\s*(?:import|export)\s/m);
