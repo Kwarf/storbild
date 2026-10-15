@@ -20,7 +20,7 @@ The dev container (`.devcontainer/`) provides Node 22 + Bun. Ports 3000 (viewer)
 - `bun run typecheck` — `tsc --noEmit` in every workspace (each package has its own `tsconfig.json`; the server's also covers `deploy/*.ts`)
 - `bun run lint` (Biome check), `bun run format` (Biome format). CI runs `bunx biome ci .`
 
-CI is a GitHub Actions workflow in `.github/workflows/ci.yml` ([ADR 0022](docs/decisions/0022-move-to-github.md)): checks and tests, the pack test, and an image build that must turn healthy. `.github/workflows/release.yml` publishes on pushed tags: `v<version>` pushes the image to `ghcr.io/kwarf/storbild`, and `sdk-v<version>` publishes `@storbild/plugin-sdk` to npm (the tag must match its `package.json` version). The Bun version is pinned in `.bun-version`, and `deploy/Containerfile`'s `BUN_VERSION` must match it.
+CI is a GitHub Actions workflow in `.github/workflows/ci.yml` ([ADR 0022](docs/decisions/0022-move-to-github.md)): checks and tests, the pack test, and an image build that must turn healthy. `.github/workflows/release.yml` publishes on pushed tags: `v<version>` pushes the image to `ghcr.io/kwarf/storbild`, and `sdk-v<version>` publishes `@storbild/plugin-sdk` to npm with trusted publishing, with no token (the tag must match its `package.json` version). The Bun version is pinned in `.bun-version`, and `deploy/Containerfile`'s `BUN_VERSION` must match it.
 
 Some rules below are enforced by tooling ([ADR 0002](docs/decisions/0002-configuration-and-tooling.md)): `packages/core` has no DOM, Bun or Node types, so timers and I/O fail typecheck, and Biome's `noRestrictedImports` blocks forbidden imports in `packages/core` and `plugins/`. New packages need a `typecheck` script and a `tsconfig.json` that extends `tsconfig.base.json`.
 

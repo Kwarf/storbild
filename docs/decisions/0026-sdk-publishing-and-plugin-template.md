@@ -42,6 +42,9 @@ versioned separately from the server.
 
 - `sdk-v<version>` builds the SDK, runs the pack test, and publishes `dist/` to npmjs with
   npm's trusted publishing (OIDC) and provenance. The tag must match the built version.
+  The package's trusted publisher is this repository's `release.yml`, and it may publish
+  directly. There is no staging step and no token to leak: only a run of that workflow, from
+  a pushed tag, can publish without the maintainer's 2FA.
 - `v<version>` builds the server image for linux/amd64 and linux/arm64 and pushes it to GHCR
   as `<version>`, `<major>.<minor>` and `latest` (ADR 0023).
 
@@ -62,5 +65,6 @@ the published package and the template together on every change.
 - The template can't drift from the SDK without failing CI.
 - There is no repository to use as a GitHub template; `docs/plugin-authoring.md` says how to
   copy the folder.
-- The first publish may need a token, if npm can't add a trusted publisher to a package that
-  doesn't exist yet.
+- 1.0.0 was published by hand, and 1.0.1, the same code, was the workflow's first release,
+  which validated the trusted publisher.
+- A pushed `sdk-v*` tag is enough to publish, so pushing tags is the release decision.
