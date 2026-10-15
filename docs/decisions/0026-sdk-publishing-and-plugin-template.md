@@ -66,5 +66,6 @@ the published package and the template together on every change.
 - There is no repository to use as a GitHub template; `docs/plugin-authoring.md` says how to
   copy the folder.
 - 1.0.0 was published by hand, and 1.0.1, the same code, was the workflow's first release,
-  which validated the trusted publisher.
+  which validated the trusted publisher. 1.0.0 was then unpublished, so 1.0.1 is the first
+  version on npm, and the template and docs require it.
 - A pushed `sdk-v*` tag is enough to publish, so pushing tags is the release decision.
