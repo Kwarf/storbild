@@ -45,6 +45,8 @@ versioned separately from the server.
   The package's trusted publisher is this repository's `release.yml`, and it may publish
   directly. There is no staging step and no token to leak: only a run of that workflow, from
   a pushed tag, can publish without the maintainer's 2FA.
+  The commit that bumps the SDK's version also bumps the template's dev dependency and peer
+  range, and the example in `docs/plugin-authoring.md`, to the new version.
 - `v<version>` builds the server image for linux/amd64 and linux/arm64 and pushes it to GHCR
   as `<version>`, `<major>.<minor>` and `latest` (ADR 0023).
 
