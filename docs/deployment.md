@@ -59,7 +59,7 @@ Install a release of Storbild, and the Bun version pinned in that release's `.bu
 apt-get install -y git unzip curl
 git clone https://github.com/Kwarf/storbild.git /opt/storbild
 cd /opt/storbild
-git checkout v1.0.0                      # the release to run
+git checkout v1.1.0                      # the release to run
 curl -fsSL https://bun.sh/install | BUN_INSTALL=/usr/local bash -s "bun-v$(cat .bun-version)"
 bun install --frozen-lockfile --production
 ```
@@ -174,7 +174,7 @@ With Docker (with the compose plugin) or Podman (with `podman-compose`) installe
 
 ```sh
 mkdir -p /opt/storbild && cd /opt/storbild
-base=https://raw.githubusercontent.com/Kwarf/storbild/v1.0.0/deploy
+base=https://raw.githubusercontent.com/Kwarf/storbild/v1.1.0/deploy
 curl -fsSLO "$base/compose.yaml"
 curl -fsSL "$base/Caddyfile.example" -o Caddyfile
 ```
@@ -220,7 +220,7 @@ As the `storbild` user:
 ```sh
 export XDG_RUNTIME_DIR=/run/user/$(id -u)
 mkdir -p ~/.config/containers/systemd ~/.config/storbild
-base=https://raw.githubusercontent.com/Kwarf/storbild/v1.0.0/deploy
+base=https://raw.githubusercontent.com/Kwarf/storbild/v1.1.0/deploy
 curl -fsSL "$base/storbild.container" -o ~/.config/containers/systemd/storbild.container
 editor ~/.config/containers/systemd/storbild.container   # set Image= to the release
 editor ~/.config/storbild/storbild.env

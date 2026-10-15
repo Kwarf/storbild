@@ -11,6 +11,8 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+## 1.1.0 — 2026-10-15
+
 ### Upgrading
 
 - Overlay widgets look different: the screens now draw every widget in a see-through, blurred

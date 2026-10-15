@@ -46,10 +46,10 @@ A widget that draws its own box gets a second one around it.
 
 ### Changed
 
-- Host (Storbild after v1.0.0): the compositor draws each widget's padding, border, radius,
+- Host (Storbild 1.1.0): the compositor draws each widget's padding, border, radius,
   background, blur and shadow from the theme's new `widgets` settings. The default is a
   see-through, blurred panel with a soft shadow.
-- Host (Storbild after v1.0.0): a widget larger than its slot's size cap shrinks to the cap
+- Host (Storbild 1.1.0): a widget larger than its slot's size cap shrinks to the cap
   and is clipped inside its frame, where it used to be cut off at the slot's edge. Frame
   shadows may reach past the slot.
 
