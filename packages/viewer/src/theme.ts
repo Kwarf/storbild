@@ -1,9 +1,65 @@
-import type { FontRef, Theme } from "@storbild/core";
+import { DEFAULT_WIDGET_FRAME, type FontRef, type Theme, type WidgetFrame } from "@storbild/core";
 import { withTimeout } from "./modules.ts";
 
 /** The theme's safe area and overlay gap when it doesn't set them, px (ADR 0012). */
 export const DEFAULT_SAFE_AREA = 96;
 export const DEFAULT_GAP = 24;
+
+const SHADOWS = {
+  none: { shadow: "", margin: 0 },
+  soft: { shadow: "0 8px 24px rgb(0 0 0 / 0.35)", margin: 32 },
+  deep: { shadow: "0 2px 6px rgb(0 0 0 / 0.3), 0 16px 48px rgb(0 0 0 / 0.6)", margin: 64 },
+  glow: {
+    shadow: "0 0 32px color-mix(in srgb, var(--sb-color-accent) 35%, transparent)",
+    margin: 48,
+  },
+};
+
+/** A light line inside the top edge of a glass frame. */
+const LIT_EDGE = "inset 0 1px 0 color-mix(in srgb, var(--sb-color-text) 28%, transparent)";
+
+/** The CSS custom properties the compositor draws widget frames with (ADR 0028). */
+export function widgetVariables(frame: WidgetFrame = {}): Record<string, string> {
+  const d = DEFAULT_WIDGET_FRAME;
+  const style = frame.style ?? d.style;
+  const opacity = frame.opacity ?? d.opacity;
+  const blur = frame.blur ?? d.blur;
+  const radius = frame.radius ?? d.radius;
+  const shadow = frame.shadow ?? d.shadow;
+  if (style === "none") {
+    return {
+      "--sb-widget-padding": "0",
+      "--sb-widget-border": "none",
+      "--sb-widget-radius": "0",
+      "--sb-widget-background": "transparent",
+      "--sb-widget-backdrop": "none",
+      "--sb-widget-shadow": "none",
+      "--sb-widget-text-shadow": "0 2px 12px rgb(0 0 0 / 0.6), 0 0 2px rgb(0 0 0 / 0.5)",
+      "--sb-widget-shadow-margin": "16px",
+      // Room for the text shadow, which the widget's own clip would cut off.
+      "--sb-widget-clip-margin": "16px",
+    };
+  }
+  // A shadow this viewer doesn't know, from a newer server, falls back to the default.
+  const outer = SHADOWS[shadow] ?? SHADOWS[DEFAULT_WIDGET_FRAME.shadow];
+  const glass = style === "glass";
+  const shadows = [glass ? LIT_EDGE : "", outer.shadow].filter(Boolean);
+  return {
+    "--sb-widget-padding": "16px 24px",
+    "--sb-widget-border": glass
+      ? "1px solid color-mix(in srgb, var(--sb-color-text) 18%, transparent)"
+      : "none",
+    "--sb-widget-radius": `${radius}px`,
+    "--sb-widget-background": glass
+      ? `color-mix(in srgb, var(--sb-color-surface) ${Math.round(opacity * 100)}%, transparent)`
+      : "var(--sb-color-surface)",
+    "--sb-widget-backdrop": glass && blur > 0 ? `blur(${blur}px) saturate(140%)` : "none",
+    "--sb-widget-shadow": shadows.length > 0 ? shadows.join(", ") : "none",
+    "--sb-widget-text-shadow": "none",
+    "--sb-widget-shadow-margin": `${outer.margin}px`,
+    "--sb-widget-clip-margin": "0px",
+  };
+}
 
 /** How long a theme waits for its fonts before it is shown anyway (ADR 0014). */
 export const FONT_TIMEOUT_MS = 5_000;
@@ -48,6 +104,7 @@ export function themeVariables(theme: Theme): Record<string, string> {
     "--sb-color-surface": colors.surface,
     "--sb-safe-area": `${theme.safeArea ?? DEFAULT_SAFE_AREA}px`,
     "--sb-gap": `${theme.gap ?? DEFAULT_GAP}px`,
+    ...widgetVariables(theme.widgets),
   };
 }
 

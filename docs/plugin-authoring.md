@@ -115,6 +115,8 @@ Per type, you can also set:
 - **`reserveSlots: ["bottom-right"]`** and **`hideOverlays: true`**: fade overlay widgets out
   while the scene is on air.
 - **`singleton: true`**: at most one instance of the type.
+- **`frame: false`**: for an overlay that draws its own shape, such as a full-width ticker. The
+  compositor then draws no widget frame around it (see Overlays below).
 - **`editor: "hello-greeting-editor"`**: a custom admin editor (see below).
 
 ### Changing a config schema
@@ -199,6 +201,11 @@ cache the assets the show uses, so they keep working through a network outage.
 **Overlays** size themselves inside their slot. A widget whose data can go out of date (for
 example "now playing" from an upstream feed) overrides `staleAt()` to return the server time
 at which it goes stale. It then fades out until it is fresh again.
+
+The compositor draws each widget's **frame**: the padding, border, rounded corners, background
+and shadow, styled by the theme. Render only the content, on a transparent host, and don't
+give it a background or padding of your own. Text colour is inherited from the frame. A widget
+that needs its own shape sets `frame: false` on its type.
 
 ## Custom admin editors
 

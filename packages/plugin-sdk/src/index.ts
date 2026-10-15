@@ -30,6 +30,11 @@ export interface InstanceTypeDefinition<Config extends z.ZodType, Settings exten
   reserveSlots?: OverlaySlot[];
   /** Fades out all overlay widgets while this scene is live. */
   hideOverlays?: boolean;
+  /**
+   * Overlays: the compositor draws the theme's widget frame around the widget, which renders
+   * only its content. `false` when the widget draws its own shape. Default `true`.
+   */
+  frame?: boolean;
   /** At most one instance of this type may exist. */
   singleton?: boolean;
 }

@@ -35,6 +35,33 @@ export const themeBackgroundSchema = z.discriminatedUnion("type", [
 ]);
 export type ThemeBackground = z.infer<typeof themeBackgroundSchema>;
 
+/**
+ * The frame the compositor draws around each overlay widget (ADR 0028). Every field is
+ * optional; the viewer has the defaults.
+ */
+export const widgetFrameSchema = z.object({
+  /** Default `glass`. */
+  style: z.enum(["glass", "solid", "none"]).optional(),
+  /** Glass only: how opaque the surface colour is, default 0.55. */
+  opacity: z.number().min(0).max(1).optional(),
+  /** Glass only: the backdrop blur in px, default 8. */
+  blur: z.number().min(0).max(64).optional(),
+  /** Corner radius in px, default 20. */
+  radius: z.number().min(0).max(64).optional(),
+  /** Default `soft`. Ignored by `none`. */
+  shadow: z.enum(["none", "soft", "deep", "glow"]).optional(),
+});
+export type WidgetFrame = z.infer<typeof widgetFrameSchema>;
+
+/** The widget frame when the theme doesn't set it (ADR 0028). */
+export const DEFAULT_WIDGET_FRAME = {
+  style: "glass",
+  opacity: 0.55,
+  blur: 8,
+  radius: 20,
+  shadow: "soft",
+} as const satisfies Required<WidgetFrame>;
+
 export const themeSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
@@ -54,6 +81,7 @@ export const themeSchema = z.object({
   safeArea: z.number().nonnegative().optional(),
   /** The space between overlay widgets in a slot, px on the canvas (ADR 0012). */
   gap: z.number().nonnegative().optional(),
+  widgets: widgetFrameSchema.optional(),
   /** Escape hatch, viewer-scoped, at your own risk. */
   customCss: z.string().optional(),
 });

@@ -148,6 +148,15 @@ describe.skipIf(!enabled)("theming", () => {
       expect(await layout.getByLabel("Safe area (px)").getAttribute("placeholder")).toBe("96");
       expect(await layout.getByLabel("Widget gap (px)").getAttribute("placeholder")).toBe("24");
 
+      // A solid widget frame in the surface colour (ADR 0028).
+      const widgets = editor().locator('[data-section="widgets"]');
+      expect(await widgets.getByLabel("Blur (px)").getAttribute("placeholder")).toBe("8");
+      expect(await widgets.getByLabel("Shadow").inputValue()).toBe("-1");
+      expect(await widgets.getByLabel("Shadow").locator("option:checked").textContent()).toBe(
+        "Soft (default)",
+      );
+      await widgets.getByLabel("Frame").selectOption({ label: "Solid" });
+
       const headingFont = editor().locator('[data-section="fonts"] sb-field[data-key="heading"]');
       await headingFont.getByLabel("Family", { exact: true }).fill("Instrument Sans");
       await headingFont.getByRole("button", { name: "Add" }).click();
@@ -160,6 +169,7 @@ describe.skipIf(!enabled)("theming", () => {
       await editor().getByRole("button", { name: "Create" }).click();
       await until(() => Object.values(state().themes).some((t) => t.name === "Party"));
       const party = Object.values(state().themes).find((t) => t.name === "Party");
+      expect(party?.widgets).toEqual({ style: "solid" });
       expect(party?.background).toEqual({
         type: "image",
         assetId: image.id,
@@ -192,10 +202,11 @@ describe.skipIf(!enabled)("theming", () => {
       expect(rendered).toBe(true);
       const clock = screen.locator("sb-compositor sb-info-clock");
       await screen.waitForFunction(() => {
-        const element = document
+        // The compositor draws the widget's frame around it.
+        const frame = document
           .querySelector("sb-compositor")
-          ?.shadowRoot?.querySelector("sb-info-clock");
-        return element && getComputedStyle(element).backgroundColor === "rgb(32, 48, 80)";
+          ?.shadowRoot?.querySelector("sb-info-clock")?.parentElement;
+        return frame && getComputedStyle(frame).backgroundColor === "rgb(32, 48, 80)";
       });
       expect(await clock.count()).toBe(1);
       const switches = await screen.evaluate(

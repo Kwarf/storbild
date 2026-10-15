@@ -118,6 +118,10 @@ export async function seedShow(
     target: at(90),
     hideAfterMs: 5 * MINUTE,
   });
+  await instance("Info desk", "markdown", "widget", {
+    content: "**Info desk** open until 02:00\nLost and found, tickets, plasters",
+    align: "left",
+  });
 
   // The rotation.
   for (const name of ["Welcome", "Tonight", "Photos", "Demo compo countdown", "House rules"]) {
@@ -127,6 +131,7 @@ export async function seedShow(
   await command("overlay.place", { instanceId: ids.Clock, slot: "top-right" });
   await command("overlay.place", { instanceId: ids["Party Wi-Fi"], slot: "bottom-right" });
   await command("overlay.place", { instanceId: ids["Next compo"], slot: "bottom-left" });
+  await command("overlay.place", { instanceId: ids["Info desk"], slot: "top-left" });
 
   // The schedule: the deadline call, then the countdown on air before the compo starts.
   await command("cue.create", {

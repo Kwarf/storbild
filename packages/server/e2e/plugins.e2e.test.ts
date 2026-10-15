@@ -235,12 +235,18 @@ describe.skipIf(!enabled)("built-in plugins", () => {
         background: { type: "color", color: "#202040" },
         colors: { text: "#ffe08a", muted: "#a0a8c0", accent: "#ff5577", surface: "#203050" },
         fonts: { heading: { family: "serif" }, body: { family: "monospace" } },
+        widgets: { style: "solid" },
       });
       await command("theme.activate", { id });
       await styled(`${markdown} >> h2`, "color", "rgb(255, 224, 138)");
       await styled(`${markdown} >> li`, "font-family", "monospace");
       await styled(`${markdown} >> blockquote`, "background-color", "rgb(32, 48, 80)");
-      await styled("sb-compositor >> sb-info-wifi", "background-color", "rgb(32, 48, 80)");
+      // The compositor draws the widget's frame around it (ADR 0028).
+      await styled(
+        "sb-compositor >> .widget:has(> sb-info-wifi)",
+        "background-color",
+        "rgb(32, 48, 80)",
+      );
       await styled("sb-compositor >> sb-info-wifi >> .ssid", "font-family", "serif");
       await Bun.sleep(600);
       await screen.screenshot({ path: join(screenshots, "screen-markdown-wifi-theme.png") });
@@ -367,6 +373,69 @@ describe.skipIf(!enabled)("built-in plugins", () => {
       expect(await screen.evaluate(() => (window as { __pwned?: boolean }).__pwned)).toBe(
         undefined,
       );
+    },
+    TIMEOUT,
+  );
+
+  test(
+    "every built-in widget leaves its frame to the compositor",
+    async () => {
+      // One instance of each built-in overlay type. A new type must be added here.
+      const widgets: Record<string, { slot: string; config: unknown }> = {
+        "info/clock": { slot: "top-left", config: { seconds: true } },
+        "info/wifi": {
+          slot: "top-right",
+          config: { ssid: "party", password: "greetings", security: "WPA" },
+        },
+        "countdown/widget": {
+          slot: "bottom-left",
+          config: { label: "Demo compo", target: Date.now() + 3_600_000, hideAfterMs: 60_000 },
+        },
+        "markdown/widget": {
+          slot: "bottom-right",
+          config: { content: "**Pizza** at the info desk\n\n> Bring your receipt", align: "left" },
+        },
+      };
+      const framed = Object.entries(state().plugins).flatMap(([plugin, entry]) =>
+        Object.entries(entry.types)
+          .filter(([, type]) => type.kind === "overlay" && type.frame !== false)
+          .map(([type]) => `${plugin}/${type}`),
+      );
+      expect(Object.keys(widgets).sort()).toEqual(framed.sort());
+
+      for (const placement of state().overlays) {
+        await command("overlay.remove", { instanceId: placement.instanceId });
+      }
+      for (const [key, { slot, config }] of Object.entries(widgets)) {
+        const [plugin, type] = key.split("/");
+        const id = await command("instance.create", { plugin, type, name: key, config });
+        await command("overlay.place", { instanceId: id, slot });
+      }
+      for (const key of Object.keys(widgets)) {
+        const host = widget(key).locator(":scope > *");
+        await host.waitFor();
+        // The compositor's wrapper draws the frame; the widget's own host draws nothing.
+        const box = await host.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            background: s.backgroundColor,
+            padding: [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft],
+            border: s.borderTopWidth,
+            radius: s.borderTopLeftRadius,
+            shadow: s.boxShadow,
+          };
+        });
+        expect({ key, ...box }).toEqual({
+          key,
+          background: "rgba(0, 0, 0, 0)",
+          padding: ["0px", "0px", "0px", "0px"],
+          border: "0px",
+          radius: "0px",
+          shadow: "none",
+        });
+      }
+      await Bun.sleep(600);
+      await screen.screenshot({ path: join(screenshots, "screen-builtin-widgets.png") });
     },
     TIMEOUT,
   );

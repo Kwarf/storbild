@@ -18,6 +18,7 @@ import {
   themeFields,
   themePayload,
   themePreviewState,
+  widgetsOf,
 } from "./theme-form.ts";
 
 /** What the preview shows when nothing is on air, if the markdown plugin is loaded. */
@@ -343,9 +344,11 @@ export class ThemePage extends LitElement {
         const value =
           key === "layout"
             ? { safeArea: draft.safeArea, gap: draft.gap }
-            : key === "colors"
-              ? draft.colors
-              : draft.fonts;
+            : key === "widgets"
+              ? (draft.widgets ?? {})
+              : key === "colors"
+                ? draft.colors
+                : draft.fonts;
         // The layout fields are top-level in the theme, so their issues keep their paths.
         const issues =
           key === "layout"
@@ -367,6 +370,10 @@ export class ThemePage extends LitElement {
                   ...(typeof next.safeArea === "number" && { safeArea: next.safeArea }),
                   ...(typeof next.gap === "number" && { gap: next.gap }),
                 };
+              } else if (key === "widgets") {
+                const { widgets: _, ...rest } = draft;
+                const widgets = widgetsOf(next);
+                this.draft = widgets ? { ...rest, widgets } : rest;
               } else {
                 set({ [key]: next } as Partial<ThemeDraft>);
               }
@@ -530,13 +537,14 @@ export class ThemePage extends LitElement {
     const draft = this.draft;
     if (!draft) return;
     void this.#run(async () => {
-      const { safeArea, gap, customCss, ...payload } = themePayload(draft);
+      const { safeArea, gap, widgets, customCss, ...payload } = themePayload(draft);
       const { id } = await send({
         type: "theme.create",
         payload: {
           ...payload,
           ...(safeArea !== null && { safeArea }),
           ...(gap !== null && { gap }),
+          ...(widgets !== null && { widgets }),
           ...(customCss !== null && { customCss }),
         },
       });

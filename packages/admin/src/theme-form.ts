@@ -1,5 +1,13 @@
 // Pure helpers for the Theme page (ADR 0014). No DOM, so they're unit-tested.
-import type { FontRef, Instance, ShowState, Theme, ThemeBackground } from "@storbild/core";
+import {
+  DEFAULT_WIDGET_FRAME,
+  type FontRef,
+  type Instance,
+  type ShowState,
+  type Theme,
+  type ThemeBackground,
+  type WidgetFrame,
+} from "@storbild/core";
 import type { Field } from "@storbild/plugin-sdk/admin";
 
 /** A theme being edited: absent `id` for one not created yet. */
@@ -199,8 +207,12 @@ function fontField(label: string, description: string, isRequired: boolean): Fie
   };
 }
 
-/** The colours, fonts and layout of a theme, edited with the SDK's form components. */
-export const themeFields: { key: "colors" | "fonts" | "layout"; label: string; field: Field }[] = [
+/** The colours, fonts, layout and widget frame of a theme, edited with the SDK's form components. */
+export const themeFields: {
+  key: "colors" | "fonts" | "layout" | "widgets";
+  label: string;
+  field: Field;
+}[] = [
   {
     key: "colors",
     label: "Colours",
@@ -286,7 +298,93 @@ export const themeFields: { key: "colors" | "fonts" | "layout"; label: string; f
       ...required,
     },
   },
+  {
+    key: "widgets",
+    label: "Widgets",
+    field: {
+      kind: "object",
+      label: "",
+      properties: [
+        {
+          key: "style",
+          field: {
+            kind: "select",
+            label: "Frame",
+            description: "What the screens draw around each overlay widget.",
+            options: [
+              { value: "glass", label: "Glass: see-through and blurred" },
+              { value: "solid", label: "Solid" },
+              { value: "none", label: "None: text only, with a shadow" },
+            ],
+            placeholder: "Glass (default)",
+            ...optional,
+          },
+        },
+        {
+          key: "opacity",
+          field: {
+            kind: "number",
+            integer: false,
+            minimum: 0,
+            maximum: 1,
+            label: "Opacity",
+            description: "Glass only: how much the surface colour covers, from 0 to 1.",
+            placeholder: String(DEFAULT_WIDGET_FRAME.opacity),
+            ...optional,
+          },
+        },
+        {
+          key: "blur",
+          field: {
+            kind: "number",
+            integer: true,
+            minimum: 0,
+            maximum: 64,
+            label: "Blur (px)",
+            description: "Glass only: how much of what is behind is blurred. 0 for slow screens.",
+            placeholder: String(DEFAULT_WIDGET_FRAME.blur),
+            ...optional,
+          },
+        },
+        {
+          key: "radius",
+          field: {
+            kind: "number",
+            integer: true,
+            minimum: 0,
+            maximum: 64,
+            label: "Corner radius (px)",
+            placeholder: String(DEFAULT_WIDGET_FRAME.radius),
+            ...optional,
+          },
+        },
+        {
+          key: "shadow",
+          field: {
+            kind: "select",
+            label: "Shadow",
+            description: "Not drawn with the frame None.",
+            options: [
+              { value: "none", label: "None" },
+              { value: "soft", label: "Soft" },
+              { value: "deep", label: "Deep" },
+              { value: "glow", label: "Glow, in the accent colour" },
+            ],
+            placeholder: "Soft (default)",
+            ...optional,
+          },
+        },
+      ],
+      ...required,
+    },
+  },
 ];
+
+/** The form's widget frame without its cleared fields, or nothing when all are cleared. */
+export function widgetsOf(value: Record<string, unknown>): WidgetFrame | undefined {
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined && v !== null);
+  return entries.length > 0 ? (Object.fromEntries(entries) as WidgetFrame) : undefined;
+}
 
 /** A theme's values as the Theme page edits them. */
 export function draftOf(theme: Theme): ThemeDraft {
@@ -319,6 +417,7 @@ export function themePayload(draft: ThemeDraft) {
     colors: draft.colors,
     safeArea: draft.safeArea ?? null,
     gap: draft.gap ?? null,
+    widgets: draft.widgets ?? null,
     customCss: draft.customCss?.trim() ? draft.customCss : null,
   };
 }

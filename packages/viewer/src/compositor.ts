@@ -132,7 +132,9 @@ export class Compositor extends LitElement {
       gap: var(--sb-gap);
       min-width: 0;
       min-height: 0;
-      overflow: hidden;
+      /* Widgets clip their own content, so only frame shadows reach past the slot (ADR 0028). */
+      overflow: clip;
+      overflow-clip-margin: var(--sb-widget-shadow-margin);
     }
     .slot.top-bar,
     .slot.bottom-bar {
@@ -179,14 +181,36 @@ export class Compositor extends LitElement {
     .slot.bottom {
       align-items: flex-end;
     }
+    .slot.top > .widget,
+    .slot.bottom > .widget {
+      max-height: 240px;
+    }
     .slot.bottom-left,
     .slot.bottom,
     .slot.bottom-right {
       align-self: end;
     }
+    /* A widget larger than its slot's cap (ADR 0012) shrinks to it and is clipped inside its
+       own frame. */
     .widget {
+      box-sizing: border-box;
       min-width: 0;
+      min-height: 0;
       max-width: 100%;
+      overflow: clip;
+      overflow-clip-margin: var(--sb-widget-clip-margin);
+      color: var(--sb-color-text, #fff);
+    }
+    /* The theme's widget frame (ADR 0028). The --sb-widget-* variables come from
+       widgetVariables in theme.ts, and are set before any widget is shown. */
+    .widget.framed {
+      padding: var(--sb-widget-padding);
+      border: var(--sb-widget-border);
+      border-radius: var(--sb-widget-radius);
+      background: var(--sb-widget-background);
+      backdrop-filter: var(--sb-widget-backdrop);
+      box-shadow: var(--sb-widget-shadow);
+      text-shadow: var(--sb-widget-text-shadow);
     }
 
     .offline {

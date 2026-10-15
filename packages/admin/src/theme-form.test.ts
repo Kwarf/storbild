@@ -8,6 +8,7 @@ import {
   type ThemeDraft,
   themePayload,
   themePreviewState,
+  widgetsOf,
 } from "./theme-form.ts";
 
 function show(): ShowState {
@@ -77,8 +78,17 @@ describe("theme form", () => {
       colors: { text: "#fff", muted: "#999", accent: "#f80", surface: "#222" },
       safeArea: null,
       gap: 12,
+      widgets: null,
       customCss: null,
     });
+    expect(themePayload({ ...draft(), widgets: { radius: 8 } }).widgets).toEqual({ radius: 8 });
+  });
+
+  test("the widget form drops cleared fields, and nothing is left when all are cleared", () => {
+    expect(widgetsOf({ style: "solid", opacity: undefined, blur: null })).toEqual({
+      style: "solid",
+    });
+    expect(widgetsOf({ opacity: undefined })).toBeUndefined();
   });
 
   test("a duplicate has no ID and a new name", () => {

@@ -84,6 +84,7 @@ export class OverlayLayer {
       if (slot && widget.wrapper.parentElement !== slot) slot.append(widget.wrapper);
       widget.wrapper.dataset.slot = placement.slot;
       widget.wrapper.style.order = String(placement.order);
+      widget.wrapper.classList.toggle("framed", scene.type.frame !== false);
       if (widget.element) this.#assign(widget.element, scene);
     }
     for (const widget of [...this.#widgets.values()]) {

@@ -675,6 +675,17 @@ describe("themes", () => {
     expect(theme && "customCss" in theme).toBe(false);
   });
 
+  test("theme.update replaces the widget frame whole and clears it with null", () => {
+    const s = setup();
+    const id = s.state.activeThemeId;
+    s.run({ type: "theme.update", payload: { id, widgets: { style: "solid", radius: 8 } } });
+    s.run({ type: "theme.update", payload: { id, widgets: { shadow: "deep" } } });
+    expect(s.state.themes[id]?.widgets).toEqual({ shadow: "deep" });
+    s.run({ type: "theme.update", payload: { id, widgets: null } });
+    const theme = s.state.themes[id];
+    expect(theme && "widgets" in theme).toBe(false);
+  });
+
   test("unknown themes are not found", () => {
     const s = setup();
     for (const command of [

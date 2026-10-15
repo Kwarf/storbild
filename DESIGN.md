@@ -238,6 +238,7 @@ interface OverlayPlacement {
 - **Fixed slots with stacking.** Several widgets per slot are allowed. Each slot is a flex container that stacks toward the screen centre: vertically for corners and `left`/`right`, horizontally for `top`/`bottom`. Gaps come from the theme.
 - **No free x/y positioning, and no centre slot.** The centre belongs to scenes and interrupts.
 - Widgets size themselves. A slot may cap the maximum width or height.
+- **The compositor draws each widget's frame** (padding, border, radius, background, blur, shadow) from the theme's `widgets` settings, and widgets render their content on a transparent host. An overlay type with `frame: false` draws its own ([ADR 0028](docs/decisions/0028-widget-frames.md)).
 - Slots sit inside the theme's safe area.
 - Scene types can declare `reserveSlots: OverlaySlot[]` (those widgets fade out while the scene is live) or `hideOverlays: true` (all widgets fade out).
 - A widget whose data is stale (for example now-playing with no update for N minutes) hides itself, and the rest of the stack closes the gap. It says when through the SDK's `staleAt()` hook.
@@ -259,6 +260,13 @@ interface Theme {
   colors: { text: string; muted: string; accent: string; surface: string };
   safeArea?: number;           // px on the 1920×1080 canvas, default 96
   gap?: number;                // px between overlay widgets, default 24 (ADR 0012)
+  widgets?: {                  // the widget frame, all optional (ADR 0028)
+    style?: "glass" | "solid" | "none";         // default "glass"
+    opacity?: number;                           // glass only, 0–1, default 0.55
+    blur?: number;                              // glass only, px, default 8
+    radius?: number;                            // px, default 20
+    shadow?: "none" | "soft" | "deep" | "glow"; // default "soft"
+  };
   customCss?: string;          // escape hatch, viewer-scoped, at your own risk
 }
 
@@ -282,7 +290,7 @@ interface FontRef {
 - Uploaded fonts are added to the viewer document with the FontFace API, under a family name unique to their files. The compositor applies a theme only once its fonts have loaded (or after 5 s), keeping the previous theme until then and drawing nothing before the first, so no fallback font is ever shown.
 - `customCss` applies inside the compositor's shadow root, after its own styles.
 
-The commands, fonts, the background layer, scene backgrounds, the interrupt cover and the Theme page are specified in [ADR 0014](docs/decisions/0014-theming.md).
+The commands, fonts, the background layer, scene backgrounds, the interrupt cover and the Theme page are specified in [ADR 0014](docs/decisions/0014-theming.md). Widget frames and the `--sb-widget-*` variables the compositor uses for them (not part of the plugin API) are in [ADR 0028](docs/decisions/0028-widget-frames.md).
 
 ### 4.7 Assets
 
@@ -402,6 +410,7 @@ export default definePlugin({
       // editor: "sb-markdown-editor",   // optional custom admin element
       // background: "theme" | "own",    // default "theme"
       // reserveSlots, hideOverlays, singleton
+      // frame: false                    // overlays: draw no widget frame
     },
   },
   server: async (ctx) => { /* optional */ },

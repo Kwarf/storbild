@@ -1,6 +1,13 @@
 // A plugin for the viewer e2e tests. Its element records its lifecycle on the page.
 import { API_VERSION, definePlugin, z } from "@storbild/plugin-sdk";
 
+const widgetConfig = z.object({
+  label: z.string(),
+  width: z.number().int().positive().default(320),
+  height: z.number().int().positive().default(80),
+  staleAt: z.number().optional(),
+});
+
 export default definePlugin({
   id: "probe",
   version: "1.0.0",
@@ -24,16 +31,20 @@ export default definePlugin({
       viewer: "probe-card",
       editor: "probe-card-editor",
     },
-    // A fixed-size widget that goes stale at `staleAt` (server time), if given.
+    // A fixed-size widget that goes stale at `staleAt` (server time), if given. Unframed, so
+    // its box is exactly its size.
     widget: {
       kind: "overlay",
       label: "Probe widget",
-      config: z.object({
-        label: z.string(),
-        width: z.number().int().positive().default(320),
-        height: z.number().int().positive().default(80),
-        staleAt: z.number().optional(),
-      }),
+      config: widgetConfig,
+      viewer: "probe-widget",
+      frame: false,
+    },
+    // The same widget in the theme's frame.
+    framed: {
+      kind: "overlay",
+      label: "Probe framed widget",
+      config: widgetConfig,
       viewer: "probe-widget",
     },
     // A scene that keeps the bottom-right corner to itself.

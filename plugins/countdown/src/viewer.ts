@@ -108,10 +108,6 @@ export class CountdownWidget extends StorbildOverlay<WidgetConfig> {
     css`
       :host {
         display: block;
-        padding: 12px 28px;
-        border-radius: 8px;
-        background: var(--sb-color-surface, #15171c);
-        color: var(--sb-color-text, #fff);
         font-family: var(--sb-font-body, sans-serif);
       }
       .label {

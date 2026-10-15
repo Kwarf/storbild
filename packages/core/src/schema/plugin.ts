@@ -26,6 +26,8 @@ export const pluginTypeInfoSchema = z.object({
   background: z.enum(["theme", "own"]).optional(),
   reserveSlots: z.array(overlaySlotSchema).optional(),
   hideOverlays: z.boolean().optional(),
+  /** Overlays: `false` when the widget draws its own frame (ADR 0028). Default `true`. */
+  frame: z.boolean().optional(),
   singleton: z.boolean().optional(),
 });
 export type PluginTypeInfo = z.infer<typeof pluginTypeInfoSchema>;

@@ -271,7 +271,7 @@ export class SbField extends LitElement {
           ${
             field.required && index >= 0
               ? nothing
-              : html`<option value="-1" ?selected=${index < 0}>${field.required ? "Choose…" : "None"}</option>`
+              : html`<option value="-1" ?selected=${index < 0}>${field.placeholder ?? (field.required ? "Choose…" : "None")}</option>`
           }
           ${field.options.map(
             (option, i) =>

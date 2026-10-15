@@ -209,8 +209,8 @@ export class MarkdownScene extends StorbildScene<Config, Settings> {
 }
 
 /**
- * Markdown on the theme's surface, sized by its slot: it wraps at the slot's width and is
- * clipped beyond its height (ADR 0012), so it isn't shrunk to fit.
+ * Markdown in the compositor's widget frame, sized by its slot: it wraps at the slot's width and
+ * is clipped beyond its height (ADR 0012), so it isn't shrunk to fit.
  */
 export class MarkdownWidget extends StorbildOverlay<WidgetConfig, Settings> {
   static override styles = [
@@ -220,16 +220,12 @@ export class MarkdownWidget extends StorbildOverlay<WidgetConfig, Settings> {
       :host {
         display: block;
         box-sizing: border-box;
-        padding: 16px 28px;
-        border-radius: 8px;
-        background: var(--sb-color-surface, #15171c);
-        color: var(--sb-color-text, #fff);
         font-family: var(--sb-font-body, sans-serif);
         font-size: calc(28px * var(--scale, 1));
         line-height: 1.35;
         overflow-wrap: anywhere;
       }
-      /* The widget is already on the surface colour, so these are tinted from the text. */
+      /* The frame may be see-through, so these are tinted from the text. */
       blockquote,
       code,
       pre {

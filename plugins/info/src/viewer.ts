@@ -14,10 +14,6 @@ export class ClockOverlay extends StorbildOverlay<Config, Settings> {
   static override styles = css`
     :host {
       display: block;
-      padding: 12px 28px;
-      border-radius: 8px;
-      background: var(--sb-color-surface, #15171c);
-      color: var(--sb-color-text, #fff);
       font-family: var(--sb-font-heading, sans-serif);
       font-size: 56px;
       font-variant-numeric: tabular-nums;
@@ -58,10 +54,6 @@ export class WifiOverlay extends StorbildOverlay<WifiConfig, Settings> {
       display: flex;
       align-items: center;
       gap: 24px;
-      padding: 16px;
-      border-radius: 8px;
-      background: var(--sb-color-surface, #15171c);
-      color: var(--sb-color-text, #fff);
       font-family: var(--sb-font-body, sans-serif);
     }
     svg {
@@ -75,7 +67,6 @@ export class WifiOverlay extends StorbildOverlay<WifiConfig, Settings> {
       display: grid;
       gap: 4px;
       min-width: 0;
-      padding-right: 12px;
       overflow-wrap: anywhere;
     }
     .label,

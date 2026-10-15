@@ -115,6 +115,7 @@ export const commandSchema = z.discriminatedUnion("type", [
       colors: themeSchema.shape.colors.optional(),
       safeArea: themeSchema.shape.safeArea.nullable(),
       gap: themeSchema.shape.gap.nullable(),
+      widgets: themeSchema.shape.widgets.nullable(),
       customCss: themeSchema.shape.customCss.nullable(),
     }),
   ),

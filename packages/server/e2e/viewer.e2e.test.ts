@@ -379,6 +379,101 @@ describe.skipIf(!enabled)("viewer", () => {
     },
     TIMEOUT,
   );
+
+  test(
+    "the compositor frames widgets from the theme, and clips oversized ones inside the frame",
+    async () => {
+      const place = async (type: string, label: string, slot: string, width = 200, height = 60) => {
+        const id = (await command("instance.create", {
+          plugin: "probe",
+          type,
+          name: label,
+          config: { label, width, height },
+        })) as string;
+        await command("overlay.place", { instanceId: id, slot });
+        return id;
+      };
+      const framed = await place("framed", "Framed", "bottom-left");
+      const bare = await place("widget", "Bare", "top-left");
+      const wide = await place("framed", "Wide", "top-right", 900);
+      const tall = await place("framed", "Tall", "bottom", 200, 400);
+      const big = screens[0]?.page as Page;
+      const wrapper = (id: string) =>
+        big.locator(`sb-compositor .widget[data-widget="${id}"][data-phase="shown"]`);
+      const style = (id: string) =>
+        wrapper(id).evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            radius: s.borderRadius,
+            backdrop: s.backdropFilter,
+            border: s.borderTopWidth,
+            padding: s.paddingTop,
+            background: s.backgroundColor,
+            shadow: s.boxShadow,
+          };
+        });
+      const slot = (name: string) =>
+        big.locator(`sb-compositor .slot.${name}`).evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            overflow: s.overflowX,
+            margin: s.getPropertyValue("overflow-clip-margin"),
+            width: el.getBoundingClientRect().width,
+          };
+        });
+      const radiusOf = async (id: string, radius: string) => {
+        for (let i = 0; (await style(id)).radius !== radius; i++) {
+          if (i > 50) throw new Error(`radius never became ${radius}`);
+          await big.waitForTimeout(100);
+        }
+      };
+      for (const id of [framed, bare, wide, tall]) await wrapper(id).waitFor();
+
+      // The defaults: glass with an 8 px blur, a 20 px radius and a soft shadow.
+      expect(await style(framed)).toMatchObject({
+        radius: "20px",
+        backdrop: "blur(8px) saturate(1.4)",
+        border: "1px",
+        padding: "16px",
+      });
+      // `frame: false` draws nothing around the widget.
+      expect(await style(bare)).toMatchObject({
+        radius: "0px",
+        backdrop: "none",
+        border: "0px",
+        padding: "0px",
+        background: "rgba(0, 0, 0, 0)",
+        shadow: "none",
+      });
+
+      const themeId = storbild.hub.state.activeThemeId;
+      await command("theme.update", {
+        id: themeId,
+        widgets: { style: "solid", radius: 4, shadow: "deep" },
+      });
+      await radiusOf(framed, "4px");
+      expect(await style(framed)).toMatchObject({ backdrop: "none", border: "0px" });
+      expect((await style(framed)).shadow).toContain("48px");
+
+      // Shadows reach 64 px past the slot for `deep`, but content never does: a widget larger
+      // than its slot's cap (640 px wide in a corner, 240 px high in `bottom`) shrinks to it
+      // and is clipped inside its frame.
+      expect(await slot("top-right")).toMatchObject({ overflow: "clip", margin: "64px" });
+      expect((await wrapper(wide).locator(".probe-widget").boundingBox())?.width).toBe(900);
+      for (const id of [wide, tall]) {
+        expect(await wrapper(id).evaluate((el) => getComputedStyle(el).overflowX)).toBe("clip");
+      }
+      expect((await wrapper(wide).boundingBox())?.width).toBeLessThanOrEqual(640);
+      expect((await wrapper(tall).boundingBox())?.height).toBeLessThanOrEqual(240);
+
+      await command("theme.update", { id: themeId, widgets: null });
+      await radiusOf(framed, "20px");
+      for (const id of [framed, bare, wide, tall]) {
+        await command("overlay.remove", { instanceId: id });
+      }
+    },
+    TIMEOUT,
+  );
 });
 
 declare global {
