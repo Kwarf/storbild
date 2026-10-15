@@ -21,5 +21,7 @@ your bundle. The SDK's major version follows the plugin API version (`apiVersion
 Start from the template in
 [`templates/plugin/`](https://github.com/Kwarf/storbild/tree/main/templates/plugin), and read
 the [plugin authoring guide](https://github.com/Kwarf/storbild/blob/main/docs/plugin-authoring.md).
+What changed between versions, and what to change in your plugin, is in
+[CHANGELOG.md](https://github.com/Kwarf/storbild/blob/main/packages/plugin-sdk/CHANGELOG.md).
 
 MIT licensed.

@@ -4,6 +4,7 @@
     "lib": ["ES2023"],
     "types": ["bun"]
   },
-  // The scripts in deploy/ (health check, soak watcher) run under Bun too.
-  "include": ["src", "../../deploy/**/*.ts"]
+  // The scripts in deploy/ (health check, soak watcher) and scripts/ (release notes) run under
+  // Bun too.
+  "include": ["src", "../../deploy/**/*.ts", "../../scripts/**/*.ts"]
 }

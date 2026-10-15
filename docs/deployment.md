@@ -340,6 +340,10 @@ The data directory (`/var/lib/storbild`, or the `storbild-data` volume) is the o
 Before every upgrade, download a show file from the admin's **Settings** page. That is the backup,
 and it imports into any install. To copy the data directory itself, stop the server first.
 
+Read the release's entry in [CHANGELOG.md](../CHANGELOG.md) first, or its notes on the GitHub
+releases page. A release that needs something done before or after upgrading starts with
+**Upgrading**.
+
 **systemd:**
 
 ```sh

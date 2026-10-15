@@ -105,5 +105,6 @@ await Bun.write(
   )}\n`,
 );
 cpSync(join(root, "README.md"), join(dist, "README.md"));
+cpSync(join(root, "CHANGELOG.md"), join(dist, "CHANGELOG.md"));
 cpSync(join(repo, "LICENSE"), join(dist, "LICENSE"));
 console.log(`built ${pkg.name}@${pkg.version} in ${relative(process.cwd(), dist) || "."}`);

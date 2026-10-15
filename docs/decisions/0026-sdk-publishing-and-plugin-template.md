@@ -5,7 +5,7 @@ Date: 2026-10-13
 ## Status
 
 Accepted. Specifies the SDK build step anticipated by ADR 0002 and ADR 0004, and refines
-M10b's template repository (ADR 0016).
+M10b's template repository (ADR 0016). ADR 0029 adds the changelogs and GitHub releases.
 
 ## Context
 

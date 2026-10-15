@@ -46,7 +46,7 @@ The package layout is what the host looks for:
   "type": "module",
   "exports": { ".": "./src/plugin.ts" },
   "storbild": { "viewer": "./src/viewer.ts", "admin": "./src/admin.ts" },
-  "peerDependencies": { "@storbild/plugin-sdk": "^1.0.1", "lit": "^3.3.3" }
+  "peerDependencies": { "@storbild/plugin-sdk": "^1.1.0", "lit": "^3.3.3" }
 }
 ```
 
@@ -293,3 +293,10 @@ too if other code imports your plugin.
 The SDK's major version is the plugin API version. Within a major version, plugins keep
 working on newer hosts. A breaking change bumps both, and older plugins are reported as
 `incompatible` instead of breaking the show.
+
+A minor release may still ask you to adapt for your plugin to look or behave right, for example
+when the host takes over something plugins used to do. The
+[changelog](../packages/plugin-sdk/CHANGELOG.md) lists every change that affects plugins,
+including changes in the host, and starts a release with **Action needed** when you should
+change your plugin. The same notes are on the `sdk-v*` releases on GitHub, so Dependabot and
+Renovate show them in their update pull requests.
