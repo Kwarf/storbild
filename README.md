@@ -12,7 +12,7 @@ Plugin-based big-screen software for demoparties.
 
 ![The admin's Live page](docs/screenshots/admin-live.png)
 
-See more of the admin interface and big-screen samples in [SCREENSHOTS.md](SCREENSHOTS.md).
+See more of the admin interface and big-screen samples in [docs/screenshots.md](docs/screenshots.md).
 
 ## Why Storbild
 

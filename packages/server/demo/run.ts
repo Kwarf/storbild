@@ -117,7 +117,7 @@ try {
       await page.screenshot({ path, animations: "disabled" });
       console.log(path);
     }
-    writeFileSync(join(rootDir, "SCREENSHOTS.md"), gallery(shots));
+    writeFileSync(join(rootDir, "docs/screenshots.md"), gallery(shots));
   }
 } finally {
   await cleanUp();
@@ -208,7 +208,7 @@ function gallery(shots: Shot[]): string {
       .flatMap((shot) => [
         `### ${shot.title}`,
         "",
-        `![${shot.title}](docs/screenshots/${shot.name}.png)`,
+        `![${shot.title}](screenshots/${shot.name}.png)`,
         "",
       ]),
   ];

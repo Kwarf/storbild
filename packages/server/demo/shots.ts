@@ -1,5 +1,5 @@
 // The screenshots for the README, taken in this order into docs/screenshots/<name>.png and
-// listed in SCREENSHOTS.md. Before each one the show is reset to the seeded
+// listed in docs/screenshots.md. Before each one the show is reset to the seeded
 // state, so any shot can be taken on its own. Edit freely: `prepare` gets the page ready and
 // resolves once it looks right.
 import type { Page } from "playwright";
@@ -21,7 +21,7 @@ export interface Demo {
 
 export interface Shot {
   name: string;
-  /** The caption in SCREENSHOTS.md. */
+  /** The caption in docs/screenshots.md. */
   title: string;
   page: "screen" | "admin";
   prepare(demo: Demo): Promise<void>;
