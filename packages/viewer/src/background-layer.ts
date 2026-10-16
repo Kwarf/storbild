@@ -41,6 +41,8 @@ export class BackgroundLayer {
   readonly #container: HTMLElement;
   #current: Mounted | undefined;
   #outgoing: Mounted | undefined;
+  /** Whether the compositor shows this layer (ADR 0030). */
+  #visible = true;
 
   constructor(container: HTMLElement) {
     this.#container = container;
@@ -72,6 +74,25 @@ export class BackgroundLayer {
     if (this.#current && background) this.#apply(this.#current, background, state, ctx);
   }
 
+  /**
+   * Whether the layer can be seen, from the compositor: `true` as it starts to fade in,
+   * `false` once it has faded out (ADR 0030). A scene background follows it, and a video
+   * pauses while it is hidden.
+   */
+  setVisible(visible: boolean) {
+    this.#visible = visible;
+    for (const mounted of [this.#current, this.#outgoing]) if (mounted) this.#setVisible(mounted);
+  }
+
+  #setVisible(mounted: Mounted) {
+    mounted.scene?.setVisible(this.#visible);
+    const { media } = mounted;
+    if (media instanceof HTMLVideoElement) {
+      if (!this.#visible) media.pause();
+      else if (media.paused) media.play().catch((error) => console.error(error));
+    }
+  }
+
   dispose() {
     for (const mounted of [this.#current, this.#outgoing]) if (mounted) this.#unmount(mounted);
     this.#current = this.#outgoing = undefined;
@@ -92,7 +113,9 @@ export class BackgroundLayer {
       const video = document.createElement("video");
       video.muted = true;
       video.loop = true;
-      video.autoplay = true;
+      video.autoplay = this.#visible;
+      // Loads ahead even while hidden and not playing, so it is ready to fade in.
+      video.preload = "auto";
       video.playsInline = true;
       video.src = ctx.assetUrl(background.assetId);
       mounted.media = video;
@@ -101,6 +124,7 @@ export class BackgroundLayer {
       host.className = "backdrop-scene";
       element.append(host);
       mounted.scene = new SceneLayer(host);
+      mounted.scene.setVisible(this.#visible);
     }
     if (mounted.media) {
       const dim = document.createElement("div");

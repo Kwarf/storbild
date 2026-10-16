@@ -1,6 +1,6 @@
 import type { PluginConfig } from "@storbild/plugin-sdk";
 import { StorbildOverlay, StorbildScene } from "@storbild/plugin-sdk/viewer";
-import { css, html } from "lit";
+import { css, html, type PropertyValues } from "lit";
 import type plugin from "./plugin.ts";
 
 type Config = PluginConfig<typeof plugin, "scene">;
@@ -18,6 +18,7 @@ class ProbeScene extends StorbildScene<Config> {
 
   override enter() {
     events.push(`enter ${this.config.label}`);
+    if (this.visible === false) events.push(`enter ${this.config.label} while hidden`);
   }
 
   override exit() {
@@ -26,6 +27,10 @@ class ProbeScene extends StorbildScene<Config> {
 
   override dispose() {
     events.push(`dispose ${this.config.label}`);
+  }
+
+  protected override updated(changed: PropertyValues) {
+    if (changed.has("visible")) events.push(`visible ${this.config.label} ${this.visible}`);
   }
 
   override render() {
@@ -53,6 +58,11 @@ class ProbeWidget extends StorbildOverlay<PluginConfig<typeof plugin, "widget">>
 
   override staleAt() {
     return this.config.staleAt;
+  }
+
+  protected override updated(changed: PropertyValues) {
+    super.updated(changed);
+    if (changed.has("visible")) events.push(`visible ${this.config.label} ${this.visible}`);
   }
 
   override render() {

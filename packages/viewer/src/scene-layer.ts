@@ -64,6 +64,8 @@ export class SceneLayer {
   #prefetch: Preparing | undefined;
   /** A target that failed to load; retried on the next update rather than in a loop. */
   #failed: string | undefined;
+  /** Whether the compositor shows this layer (ADR 0030). */
+  #visible = true;
 
   constructor(container: HTMLElement, options: SceneLayerOptions = {}) {
     this.#container = container;
@@ -88,6 +90,24 @@ export class SceneLayer {
       if (mounted) this.#assign(mounted);
     }
     this.#reconcile();
+  }
+
+  /**
+   * Whether the layer can be seen, from the compositor: `true` as it starts to fade in,
+   * `false` once it has faded out (ADR 0030). The scenes on air, fading in or out, follow it;
+   * prepared ones stay hidden until they enter.
+   */
+  setVisible(visible: boolean) {
+    this.#visible = visible;
+    for (const mounted of [this.#current, this.#outgoing]) {
+      if (mounted) this.#setVisible(mounted, visible);
+    }
+  }
+
+  #setVisible(mounted: Mounted, visible: boolean) {
+    this.#safely("update", () => {
+      mounted.element.visible = visible;
+    });
   }
 
   #fadeMs(): number {
@@ -175,6 +195,7 @@ export class SceneLayer {
     }
     if (mounted) {
       mounted.wrapper.dataset.phase = "in";
+      this.#setVisible(mounted, this.#visible);
       this.#safely("enter", () => mounted.element.enter(at));
       this.#fade(mounted, 1).finished.then(
         () => {

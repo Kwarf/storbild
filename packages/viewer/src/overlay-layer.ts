@@ -27,6 +27,8 @@ interface Widget {
   placed: boolean;
   /** Showing, or fading in. */
   shown: boolean;
+  /** On screen: from the start of its fade-in to the end of its fade-out (ADR 0030). */
+  onScreen: boolean;
   animation?: Animation | undefined;
   disposed: boolean;
 }
@@ -51,6 +53,8 @@ export class OverlayLayer {
   #state: ShowState | undefined;
   #ctx: ViewerContext | undefined;
   #reserved: ReadonlySet<OverlaySlot> = new Set();
+  /** Whether the compositor shows this layer (ADR 0030). */
+  #visible = true;
 
   constructor(container: HTMLElement, options: OverlayLayerOptions = {}) {
     this.#prepareTimeoutMs = options.prepareTimeoutMs ?? 10_000;
@@ -93,6 +97,25 @@ export class OverlayLayer {
     }
   }
 
+  /**
+   * Whether the layer can be seen, from the compositor: `true` as it starts to fade in,
+   * `false` once it has faded out (ADR 0030). Widgets on screen follow it.
+   */
+  setVisible(visible: boolean) {
+    this.#visible = visible;
+    for (const widget of this.#widgets.values()) this.#setVisible(widget);
+  }
+
+  #setVisible(widget: Widget) {
+    const { element } = widget;
+    const visible = this.#visible && widget.onScreen;
+    if (element) {
+      this.#safely("update", () => {
+        element.visible = visible;
+      });
+    }
+  }
+
   /** Removes every widget and the slots. */
   dispose() {
     for (const widget of [...this.#widgets.values()]) this.#unmount(widget);
@@ -112,6 +135,7 @@ export class OverlayLayer {
       ready: false,
       placed: true,
       shown: false,
+      onScreen: false,
       disposed: false,
     };
     this.#widgets.set(key, widget);
@@ -175,6 +199,8 @@ export class OverlayLayer {
       wrapper.style.display = "";
       wrapper.classList.add("shown");
       wrapper.dataset.phase = "in";
+      widget.onScreen = true;
+      this.#setVisible(widget);
       if (element) this.#safely("enter", () => element.enter(at));
       this.#fade(widget, 1).finished.then(
         () => {
@@ -189,6 +215,8 @@ export class OverlayLayer {
         () => {
           widget.animation = undefined;
           if (widget.shown) return;
+          widget.onScreen = false;
+          this.#setVisible(widget);
           wrapper.style.display = "none";
           wrapper.classList.remove("shown");
           wrapper.dataset.phase = "hidden";

@@ -19,6 +19,44 @@ import { fonts, themeVariables } from "./theme.ts";
 const MAX_WAIT_MS = 60_000;
 
 /**
+ * Tells a layer whether it can be seen (ADR 0030): at once when it is shown, so its elements
+ * draw through the fade-in, and only once its fade-out has finished when it is hidden.
+ */
+class LayerVisibility {
+  readonly #apply: (visible: boolean) => void;
+  #visible = true;
+  #timer: number | undefined;
+
+  constructor(apply: (visible: boolean) => void) {
+    this.#apply = apply;
+  }
+
+  set(shown: boolean, fadeMs: number) {
+    if (shown) {
+      window.clearTimeout(this.#timer);
+      this.#timer = undefined;
+      if (!this.#visible) {
+        this.#visible = true;
+        this.#apply(true);
+      }
+    } else if (this.#visible && this.#timer === undefined) {
+      this.#timer = window.setTimeout(() => {
+        this.#timer = undefined;
+        this.#visible = false;
+        this.#apply(false);
+      }, fadeMs);
+    }
+  }
+
+  /** Back to visible, as new layers start. */
+  reset() {
+    window.clearTimeout(this.#timer);
+    this.#timer = undefined;
+    this.#visible = true;
+  }
+}
+
+/**
  * Renders a show state on a 1920×1080 canvas (DESIGN.md §7). Layers, bottom to top: theme
  * background, main scene, overlay slots, interrupt, blackout. Beneath the interrupt, a dim
  * hides what is below, or the scene and overlays fade out so the theme background covers them,
@@ -258,6 +296,12 @@ export class Compositor extends LitElement {
   #main: SceneLayer | undefined;
   #interrupt: SceneLayer | undefined;
   #overlays: OverlayLayer | undefined;
+  readonly #visibility = {
+    background: new LayerVisibility((visible) => this.#background?.setVisible(visible)),
+    main: new LayerVisibility((visible) => this.#main?.setVisible(visible)),
+    overlays: new LayerVisibility((visible) => this.#overlays?.setVisible(visible)),
+    interrupt: new LayerVisibility((visible) => this.#interrupt?.setVisible(visible)),
+  };
   #timeline: Timeline | undefined;
   #timer: number | undefined;
   /** The theme on screen, whose fonts have loaded. */
@@ -287,21 +331,30 @@ export class Compositor extends LitElement {
     this.#arm(this.#timeline, now);
   }
 
-  override render() {
+  /**
+   * Which layers the interrupt and the scene on air hide. With `below: "hide"`, the scene and
+   * overlays fade out and the theme background shows again, even beneath a scene with its own
+   * background (ADR 0014).
+   */
+  #covers() {
     const { state } = this;
     const timeline = this.#timeline;
-    const below = timeline?.interrupt?.below;
-    // With `below: "hide"`, the scene and overlays fade out and the theme background shows
-    // again, even beneath a scene with its own background (ADR 0014).
-    const covered = below === "hide";
+    const covered = timeline?.interrupt?.below === "hide";
     const main = timeline?.main?.instanceId;
-    if (this.offline) this.#offlineText = this.offline;
-    const offline = this.offline !== undefined && !timeline?.blackout;
     const ownBackground =
       state !== undefined &&
       main !== undefined &&
       renderable(state, main) !== undefined &&
       sceneBackground(state, main) !== "theme";
+    return { covered, ownBackground };
+  }
+
+  override render() {
+    const timeline = this.#timeline;
+    const below = timeline?.interrupt?.below;
+    const { covered, ownBackground } = this.#covers();
+    if (this.offline) this.#offlineText = this.offline;
+    const offline = this.offline !== undefined && !timeline?.blackout;
     return html`
       <div class="layer background ${ownBackground && !covered ? "off" : ""}"></div>
       <div class="layer main ${covered ? "off" : ""}" part="main"></div>
@@ -332,6 +385,15 @@ export class Compositor extends LitElement {
     this.#main.update(state, ctx, main?.instanceId, next?.instanceId);
     this.#interrupt.update(state, ctx, interrupt?.instanceId);
     this.#overlays.update(state, ctx, reservedSlots(state, timeline));
+
+    const { covered, ownBackground } = this.#covers();
+    const blackout = timeline.blackout;
+    const fadeMs = state.settings?.transitionMs ?? TRANSITION_MS;
+    const visibility = this.#visibility;
+    visibility.background.set(!(ownBackground && !covered) && !blackout, fadeMs);
+    visibility.main.set(!covered && !blackout, fadeMs);
+    visibility.overlays.set(!covered && !blackout, fadeMs);
+    visibility.interrupt.set(!blackout, fadeMs);
   }
 
   /**
@@ -375,6 +437,7 @@ export class Compositor extends LitElement {
     this.#main?.dispose();
     this.#interrupt?.dispose();
     this.#overlays?.dispose();
+    for (const visibility of Object.values(this.#visibility)) visibility.reset();
     // Reconnecting creates new layers on the next update.
     this.#background = this.#main = this.#interrupt = this.#overlays = undefined;
   }

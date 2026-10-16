@@ -26,6 +26,7 @@ export abstract class StorbildElement<
     state: { attribute: false },
     pluginState: { attribute: false },
     ctx: { attribute: false },
+    visible: { attribute: false },
   };
 
   declare config: Config;
@@ -35,6 +36,14 @@ export abstract class StorbildElement<
   /** The plugin's runtime data shared by all its instances, if any. */
   declare pluginState: PluginState | undefined;
   declare ctx: ViewerContext;
+  /**
+   * `false` while the element is mounted but fully hidden: prepared before `enter`, under a
+   * layer that has faded out or a blackout, or a widget faded out for a reserved slot or stale
+   * data. It turns `true` before a fade-in and `false` after a fade-out, so an animated element
+   * can stop drawing while nobody sees it. Older hosts leave it `undefined`, so treat anything
+   * but `false` as visible.
+   */
+  declare visible: boolean | undefined;
 
   /** Preloads what the element needs (images, fonts). Awaited before the element is shown. */
   prepare(): void | Promise<void> {}

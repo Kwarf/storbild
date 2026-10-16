@@ -11,6 +11,14 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+### Changed
+
+- A theme's background video pauses while it can't be seen, behind a scene with its own
+  background or under a blackout, and plays again when it comes back.
+- Screens tell plugins when their scenes and widgets are hidden, so animated ones can stop
+  drawing ([ADR 0030](docs/decisions/0030-element-visibility.md), see the
+  [SDK changelog](packages/plugin-sdk/CHANGELOG.md#unreleased)).
+
 ## 1.1.0 — 2026-10-15
 
 ### Upgrading

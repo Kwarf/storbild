@@ -95,6 +95,8 @@ export async function createSceneElement(
   );
   if (!definedBy.has(tag)) definedBy.set(tag, scene.module);
   const element = document.createElement(tag) as SceneElement;
+  // Hidden until its layer shows it (ADR 0030).
+  element.visible = false;
   assign(element, scene, ctx);
   return element;
 }

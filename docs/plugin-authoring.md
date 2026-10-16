@@ -169,6 +169,7 @@ properties:
   validated.
 - `state` and `pluginState`: runtime data from your server part, if you have one.
 - `ctx`: `serverNow()` and `assetUrl(id)`.
+- `visible`: whether the element can be seen (below).
 
 Lit re-renders when any of them changes.
 
@@ -185,6 +186,26 @@ countdown agree to the frame. Timers are fine for redrawing. See the template's 
   scene never appears half-drawn.
 - `enter(at)` and `exit(at)` tell you when the element becomes visible and starts leaving.
 - `dispose()` comes before removal. Clear timers there or in `disconnectedCallback`.
+
+**Hidden elements.** The compositor often keeps an element mounted while nobody can see it:
+the next scene is prepared before it enters, the theme background (which can be a scene) fades
+out behind a scene with its own background, an interrupt can hide the scene and overlays below
+it, a blackout covers everything, and a widget fades out while its slot is reserved or it is
+stale. `visible` is `false` while that lasts. It turns `true` before a fade-in starts and
+`false` only once the fade-out has finished, so the element is never seen frozen. An element
+that animates every frame, such as a WebGL scene, should stop drawing while it is hidden:
+
+```ts
+protected override updated(changed: PropertyValues) {
+  if (changed.has("visible")) {
+    if (this.visible !== false) this.#start();
+    else this.#stop();
+  }
+}
+```
+
+Older Storbild hosts never set `visible`, so treat anything but `false` as visible, and
+don't wait for it to become `true` before you draw.
 
 **Theme.** The active theme reaches you only as CSS variables. Always give a fallback:
 

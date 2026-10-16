@@ -333,6 +333,19 @@ describe.skipIf(!enabled)("theming", () => {
       await screen
         .locator('sb-compositor .backdrop[data-background="image"]')
         .waitFor({ state: "detached" });
+
+      // Under a blackout it pauses once the fade is over, and plays again after (ADR 0030).
+      const paused = (value: boolean) =>
+        screen.waitForFunction(
+          (value) =>
+            document.querySelector("sb-compositor")?.shadowRoot?.querySelector("video")?.paused ===
+            value,
+          value,
+        );
+      await command("live.blackout", { on: true });
+      await paused(true);
+      await command("live.blackout", { on: false });
+      await paused(false);
     },
     TIMEOUT,
   );
