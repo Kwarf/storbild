@@ -46,7 +46,7 @@ The package layout is what the host looks for:
   "type": "module",
   "exports": { ".": "./src/plugin.ts" },
   "storbild": { "viewer": "./src/viewer.ts", "admin": "./src/admin.ts" },
-  "peerDependencies": { "@storbild/plugin-sdk": "^1.1.0", "lit": "^3.3.3" }
+  "peerDependencies": { "@storbild/plugin-sdk": "^1.2.0", "lit": "^3.3.3" }
 }
 ```
 

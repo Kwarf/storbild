@@ -11,6 +11,8 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+## 1.2.0 — 2026-10-16
+
 ### Added
 
 - A **Shader** scene: paste a fragment shader from Shadertoy's Image tab, or open it from a
@@ -26,7 +28,7 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
   background or under a blackout, and plays again when it comes back.
 - Screens tell plugins when their scenes and widgets are hidden, so animated ones can stop
   drawing ([ADR 0030](docs/decisions/0030-element-visibility.md), see the
-  [SDK changelog](packages/plugin-sdk/CHANGELOG.md#unreleased)).
+  [SDK changelog](packages/plugin-sdk/CHANGELOG.md#120--2026-10-16)).
 
 ## 1.1.0 — 2026-10-15
 

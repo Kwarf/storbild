@@ -11,14 +11,16 @@ follow [semver](https://semver.org/): the major version is the plugin API versio
 
 ## Unreleased
 
+## 1.2.0 — 2026-10-16
+
 ### Added
 
 - `visible` on scenes and overlays: `false` while the element is mounted but can't be seen
   (prepared before it enters, under a faded-out layer or a blackout, or a widget faded out for
   a reserved slot or stale data), so an element that animates every frame can stop drawing
   ([ADR 0030](https://github.com/Kwarf/storbild/blob/main/docs/decisions/0030-element-visibility.md)).
-  It turns `true` before a fade-in and `false` after a fade-out. The host sets it from the
-  next Storbild release; older hosts leave it `undefined`, so treat anything but `false` as
+  It turns `true` before a fade-in and `false` after a fade-out. The host sets it from
+  Storbild 1.2.0 on; older hosts leave it `undefined`, so treat anything but `false` as
   visible.
 
 ## 1.1.0 — 2026-10-15
