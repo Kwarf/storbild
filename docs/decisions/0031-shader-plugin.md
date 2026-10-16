@@ -58,18 +58,20 @@ the admin editor import it, so the editor checks what the screens run.
 - `iResolution` (`vec3`): the canvas size in pixels, after `scale`.
 - `iTime` and `iTimeDelta` (`float`): shader time and the time since the last frame, in
   seconds.
+- `iFrameRate` (`float`): frames per second, from the last frame.
 - `iFrame` (`int`): frames since the element was mounted. It is not in step across screens.
 - `iDate` (`vec4`): year, month (from 0), day and seconds since midnight, from `serverNow()`
   in the screen's time zone.
-- `iMouse` (`vec4`): always zero, so shaders that read it still compile.
 - `iChannel0`–`3` (`sampler2D`), with `iChannelResolution` (`vec3[4]`).
 - `sbText`, `sbMuted`, `sbAccent` and `sbSurface` (`vec3`): the theme colours. The viewer
   reads the `--sb-color-*` variables with `getComputedStyle` (ADR 0014), lets the browser
   resolve them to RGB, and reads them again every second, so a theme change reaches a running
   shader.
 
-Shadertoy's multipass buffers, cubemaps, sound and keyboard inputs, `iSampleRate` and
-`iChannelTime` are out of scope.
+Shadertoy's multipass buffers, cubemaps, and mouse, sound and keyboard inputs are out of
+scope, and so are the uniforms that only make sense with them (`iMouse`, `iChannelTime`,
+`iSampleRate`). They are not declared: a shader that uses them fails to compile, rather than
+running with stand-in values.
 
 **Time.** `iTime` is `(serverNow() / 1000 × speed) mod loop`, counted from the Unix epoch
 rather than from when the element was mounted. Every screen and the admin preview therefore
@@ -103,10 +105,13 @@ and adds no dependencies:
   an asset)
 - a compile check when the source changes, debounced while typing, in an offscreen WebGL2
   context with the program text from `glsl.ts`
-- the errors as rows below the field ("line 12: …"); a row moves the cursor to its line
-- warnings for what isn't provided: `iMouse` (always zero), `iChannelTime`, `iSampleRate`, and
-  a source without `mainImage`
-- the other fields as `<sb-field>`s, like the Wi-Fi editor (ADR 0015)
+- the errors as rows below the field, each with a "Line 12" button that selects that line
+- before compiling, errors for a source without `mainImage` and for a `#version` line of its
+  own, and warnings for channels the shader reads that have no image
+- a "Shader inputs" link above the field that opens the uniforms in a native `popover`,
+  listed as declarations with a comment each, as Shadertoy lists its own
+- the other fields in an `<sb-form>` of the schema without `source`, like the Wi-Fi editor
+  (ADR 0015)
 
 Compile errors are not schema issues, so saving isn't blocked: the admin's GPU may reject a
 shader that the screens accept, or the other way round. The Library preview (ADR 0010) shows

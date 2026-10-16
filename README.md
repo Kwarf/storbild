@@ -24,9 +24,9 @@ See more of the admin interface and big-screen samples in [docs/screenshots.md](
 
 ## Features
 
-- **Scenes:** Markdown text, slideshows, countdowns and announcements.
+- **Scenes:** Markdown text, slideshows, countdowns, announcements and WebGL shaders pasted from Shadertoy.
 - **Overlays:** a clock, the Wi-Fi network with a QR code to join it, a countdown and short Markdown text, placed in slots around the edge of the screen.
-- **Themes:** one look for the whole party, with your own background, fonts and colours.
+- **Themes:** one look for the whole party, with your own background (a colour, an image, a video or a shader), fonts and colours.
 - **Files:** upload images, videos and fonts once and use them anywhere.
 - **Show files:** export the whole show, files included, as one zip. Prepare at home, then import it at the venue.
 - **Plugins:** scenes and overlays are plugins, and you can write your own.

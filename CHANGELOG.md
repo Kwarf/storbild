@@ -11,6 +11,15 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+### Added
+
+- A **Shader** scene: paste a fragment shader from Shadertoy's Image tab, or open it from a
+  file, and use it on air or as the theme background. Every screen shows the same frame, the
+  theme colours are available to the shader, and the Library checks that it compiles and
+  shows the errors by line. If an edit doesn't compile, the screens keep the last version that
+  did. **Resolution** and **Frame rate limit** keep heavy shaders within what a slow screen
+  can draw ([ADR 0031](docs/decisions/0031-shader-plugin.md)).
+
 ### Changed
 
 - A theme's background video pauses while it can't be seen, behind a scene with its own
