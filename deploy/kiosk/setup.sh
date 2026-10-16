@@ -31,7 +31,7 @@ apt-get install -y --no-install-recommends cage "$browser" fonts-dejavu-core
 
 # Hold Chromium, so a browser update never lands under a running show. Update it on purpose:
 # apt-mark unhold, apt-get install --only-upgrade, apt-mark hold.
-held=$(dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 'chromium*' 2>/dev/null | sed -n 's/^ii *//p')
+held=$(dpkg-query -W -f '${db:Status-Abbrev} ${Package}\n' 'chromium*' 2>/dev/null | sed -n 's/^[ih]i *//p')
 # shellcheck disable=SC2086
 apt-mark hold $held
 cat > /etc/apt/apt.conf.d/51storbild-kiosk <<'APT'
@@ -47,6 +47,17 @@ fi
 usermod -aG video,render,input kiosk 2>/dev/null || usermod -aG video,input kiosk
 
 install -D -m 0755 "$here/kiosk.sh" /usr/local/lib/storbild-kiosk/kiosk.sh
+
+# An invisible cursor theme for cage. The page hides the cursor only once a pointer enters it,
+# and without a mouse none ever does, so cage would draw its cursor in the middle of the
+# screen. Cage always loads the theme named `default`, so this one has that name, in a
+# directory of its own that the unit's XCURSOR_PATH points to. Its cursor is one transparent
+# pixel in the Xcursor format.
+cursors=/usr/local/share/storbild-kiosk/icons/default/cursors
+install -d "$cursors"
+printf 'Xcur\020\0\0\0\0\0\1\0\1\0\0\0\2\0\375\377\030\0\0\0\034\0\0\0' > "$cursors/left_ptr"
+printf '\044\0\0\0\2\0\375\377\030\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0' >> "$cursors/left_ptr"
+ln -sf left_ptr "$cursors/default"
 install -m 0644 "$here/storbild-kiosk.service" /etc/systemd/system/storbild-kiosk.service
 
 if [ ! -f /etc/storbild-kiosk.env ]; then

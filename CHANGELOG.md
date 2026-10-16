@@ -11,6 +11,14 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+**Upgrading:** on each screen, pull the new release and run `deploy/kiosk/setup.sh` again.
+
+### Fixed
+
+- Screens without a mouse no longer show a cursor in the middle of the picture. The kiosk
+  setup installs an invisible cursor theme for cage.
+- Running the kiosk setup again no longer fails once Chromium is held.
+
 ## 1.2.0 — 2026-10-16
 
 ### Added

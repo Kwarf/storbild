@@ -17,7 +17,8 @@ fi
 
 browser=$(command -v chromium || command -v chromium-browser)
 
-# The flags from DESIGN.md §7. The page hides the cursor itself.
+# The flags from DESIGN.md §7. The cursor theme from setup.sh hides cage's cursor, and the page
+# hides Chromium's.
 exec "$browser" \
   --ozone-platform=wayland \
   --user-data-dir="$profile" \

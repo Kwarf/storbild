@@ -22,6 +22,8 @@ StandardError=journal
 UtmpIdentifier=tty1
 UtmpMode=user
 Environment=XDG_SESSION_TYPE=wayland
+# The invisible cursor theme from setup.sh, so no cursor shows on the screen.
+Environment=XCURSOR_PATH=/usr/local/share/storbild-kiosk/icons
 ExecStart=/usr/bin/cage -d -- /usr/local/lib/storbild-kiosk/kiosk.sh
 Restart=always
 RestartSec=3
