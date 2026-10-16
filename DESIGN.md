@@ -459,6 +459,7 @@ A plugin package's `exports["."]` is the definition module above, which only the
 | `countdown` | scene `countdown`, overlay `widget` | Target time; renders `target − serverNow()`; the overlay hides a while after the target. Built in M9 |
 | `announcement` | scene `announcement` | Big-text message on an opaque panel; intended for interrupts and takes. Built in M6b |
 | `info` | overlay `wifi`, overlay `clock` | SSID/password plus QR code, with a custom editor that previews it; clock. The clock is built in M8, Wi-Fi in M9 |
+| `shader` | scene `shader` | A Shadertoy-style `mainImage()` fragment shader in WebGL2, in step across screens through `serverNow()`; theme colours as uniforms; up to four image channels; render scale and fps cap; `background: "own"`. Usable as the theme background. Custom editor with a compile check. Planned in [ADR 0031](docs/decisions/0031-shader-plugin.md) |
 
 `now-playing` (an overlay fed by an upstream SSE stream) will be an external plugin in its own repository, because its upstream service is private ([ADR 0015](docs/decisions/0015-built-in-plugins.md)). Plugin dependencies, rendering and the countdown and Wi-Fi rules are specified there too.
 
