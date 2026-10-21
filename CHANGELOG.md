@@ -11,6 +11,8 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 
 ## Unreleased
 
+## 1.2.1 — 2026-10-21
+
 **Upgrading:** on each screen, pull the new release and run `deploy/kiosk/setup.sh` again.
 
 ### Fixed
