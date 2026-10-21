@@ -18,6 +18,8 @@ follow [semver](https://semver.org/). Each release is a `v<version>` tag and the
 - Screens without a mouse no longer show a cursor in the middle of the picture. The kiosk
   setup installs an invisible cursor theme for cage.
 - Running the kiosk setup again no longer fails once Chromium is held.
+- Numbered lists in Markdown scenes no longer cut off their numbers when the theme font is
+  wide, such as a monospace font.
 
 ## 1.2.0 — 2026-10-16
 

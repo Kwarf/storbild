@@ -49,9 +49,15 @@ const typography = css`
   .body > :last-child {
     margin-bottom: 0;
   }
-  ul,
-  ol {
+  ul {
     padding-left: 1.2em;
+  }
+  /* Room for the number in digit widths, so a wide or monospace theme font fits it. */
+  ol {
+    padding-left: 3ch;
+  }
+  ol:has(> li:nth-child(10)) {
+    padding-left: 4ch;
   }
   li::marker {
     color: var(--sb-color-accent, #e8a33d);
